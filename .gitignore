@@ -1,0 +1,6 @@
+runs/
+.pytest_cache/
+.vscode/
+__pycache__/
+*.py[cod]
+*.log

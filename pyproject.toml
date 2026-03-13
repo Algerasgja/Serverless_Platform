@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conditional-dag-serverless-simulator"
+version = "0.1.0"
+description = "Local serverless simulator with conditional DAG, least-load scheduler, and HPA autoscaling."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+analysis = [
+  "matplotlib>=3.8",
+]
+
+[tool.setuptools.packages.find]
+include = ["simulator*"]

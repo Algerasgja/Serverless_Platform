@@ -1,0 +1,82 @@
+experiment:
+  name: baseline_burst
+  duration_seconds: 300
+  random_seed: 42
+
+dataset:
+  source: alibaba_cluster_trace_microservices_v2021
+  processed_dir: data/processed
+  time_window_minutes: 1440
+  dag_tasks_file: data/raw/filtered_tasks.csv
+  dag_top_k: 20
+  dag_selection_mode: random_unique
+  dag_selection_seed: 42
+
+dag_policy:
+  path_rule: mode_prefix_coupled_v1
+  context_regime: fixed
+  mode_count: 3
+  mode_prior_concentration: 2.0
+  mode_strength: 1.0
+  prefix_strength: 1.2
+  prefix_decay: 0.85
+  prefix_window: 3
+  temperature: 1.0
+  coupling_seed_offset: 707
+  drifting_interval_sec: 30
+  drifting_strength: 0.08
+  drifting_concentration: 200.0
+  drifting_floor: 0.001
+  eps: 0.000000001
+
+workload:
+  mode: replay
+  rate_multiplier: 0.0001
+  invokes_cdf_file: data/real-world-emulation/CDFs/invokesCDF.csv
+  cvs_cdf_file: data/real-world-emulation/CDFs/CVs.csv
+  realworld_seed_offset: 303
+  min_iat_ms: 1.0
+
+runtime:
+  request_timeout_ms: 120000
+  frame_tick_ms: 1
+  function_profile_mode: cpu_intensive_random
+  function_profiles_file: data/raw/function_profiles/function_profiles.csv
+  function_profile_seed_offset: 202
+  compute_mb_per_sec_per_1000mcpu: 180.0
+  function_cpu_request_mcpu_min: 1000
+  function_cpu_request_mcpu_max: 1000
+  function_memory_mb_min: 256
+  function_memory_mb_max: 2048
+  function_output_data_mb_min: 10.0
+  function_output_data_mb_max: 30.0
+  function_compute_data_mb_min: 5.4
+  function_compute_data_mb_max: 9.0
+  function_cold_start_ms_min: 1200
+  function_cold_start_ms_max: 3200
+  cold_start_ratio_floor: 1.2
+
+physical_nodes:
+  count: 20
+  max_containers_per_node: 10
+  idle_ttl_sec: 60
+  same_node_transfer_ms_min: 1
+  same_node_transfer_ms_max: 3
+  cross_node_transfer_ms_min: 8
+  cross_node_transfer_ms_max: 20
+  cpu_total_mcpu_per_node: 32000
+  mem_total_mb_per_node: 131072
+  bandwidth_mode: random_uniform
+  bandwidth_mbps_min: 1000
+  bandwidth_mbps_max: 25000
+  bandwidth_seed_offset: 101
+  bandwidth_matrix_file: data/raw/network/node_bandwidth_matrix.csv
+
+scheduler:
+  type: least_load
+
+capacity:
+  max_total_instances: 200
+
+output:
+  runs_dir: runs
