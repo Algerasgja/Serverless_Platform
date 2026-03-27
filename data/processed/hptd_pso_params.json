@@ -1,0 +1,46 @@
+{
+  "method": "pso_once_offline",
+  "search_space": {
+    "alpha": [
+      0.1,
+      0.5
+    ],
+    "beta": [
+      1.0,
+      2.0
+    ]
+  },
+  "pso": {
+    "particles": 50,
+    "max_iters": 100,
+    "improve_threshold": 0.001,
+    "patience": 10,
+    "seed": 20260318
+  },
+  "frequencies": [
+    5,
+    10,
+    15
+  ],
+  "per_frequency_best": {
+    "5": {
+      "alpha": 0.13258357003999643,
+      "beta": 1.9671221480032628,
+      "objective": 0.00045770276606242377
+    },
+    "10": {
+      "alpha": 0.1174936124282544,
+      "beta": 1.813758956991622,
+      "objective": 0.0005185418443484834
+    },
+    "15": {
+      "alpha": 0.15254187017467166,
+      "beta": 1.9544798135696302,
+      "objective": 0.0006220084709234799
+    }
+  },
+  "averaged_best": {
+    "hptd_alpha": 0.13420635088097418,
+    "hptd_beta": 1.9117869728548385
+  }
+}

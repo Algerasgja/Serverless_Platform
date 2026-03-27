@@ -18,7 +18,8 @@ from simulator.runtime.pool import (
 )
 from simulator.runtime.resource_model import build_bandwidth_matrix, build_function_profiles
 from simulator.runtime.workload import generate_arrivals
-from simulator.strategies.factory import build_scheduler
+from simulator.strategies.autoscaler.base import ScaleDownPlan
+from simulator.strategies.factory import build_autoscaler, build_scheduler
 from simulator.strategies.scheduler import CandidateScore
 from simulator.types import DagCorpus, FunctionProfile, RequestContext
 
@@ -37,6 +38,10 @@ class SimulationRunner:
         self._corpus = corpus
         self._rng = random.Random(config.experiment.random_seed)
         self._scheduler = build_scheduler(config.scheduler, self._rng)
+        self._autoscaler = build_autoscaler(
+            config.autoscaler,
+            templates=corpus.templates,
+        )
         self._dag_engine = ConditionalDagEngine(
             corpus.templates,
             path_rule=config.dag_policy.path_rule,
@@ -53,6 +58,9 @@ class SimulationRunner:
             drifting_strength=config.dag_policy.drifting_strength,
             drifting_concentration=config.dag_policy.drifting_concentration,
             drifting_floor=config.dag_policy.drifting_floor,
+            mode_preference_scale=config.dag_policy.mode_preference_scale,
+            coupling_preference_scale=config.dag_policy.coupling_preference_scale,
+            path_noise_std=config.dag_policy.path_noise_std,
             eps=config.dag_policy.eps,
             base_seed=config.experiment.random_seed,
             session_gap_sec=config.dag_policy.session_gap_sec,
@@ -105,6 +113,7 @@ class SimulationRunner:
             dataset_metadata=corpus.metadata,
         )
         self._workload_replay_profile: dict[str, Any] = {}
+        self._autoscaler_finished_requests: set[str] = set()
 
     def run(self) -> str:
         duration_sec = self._config.experiment.duration_seconds
@@ -122,6 +131,8 @@ class SimulationRunner:
                 self._handle_step_running(event)
             elif event.kind == "step_complete":
                 self._handle_step_complete(event)
+            elif event.kind == "prewarm_ready":
+                self._handle_prewarm_ready(event)
 
         self._run_housekeeping_until(max(self._last_event_ms, duration_sec * 1000))
         self._finalize_requests()
@@ -132,6 +143,7 @@ class SimulationRunner:
             dag_selection=self._corpus.metadata.get("dag_selection"),
             workload_replay_profile=self._workload_replay_profile,
             path_model=self._dag_engine.path_model_summary(),
+            autoscaler_summary=self._autoscaler.summary(),
         )
         return str(self._run_writer.run_dir)
 
@@ -178,6 +190,7 @@ class SimulationRunner:
             req = self._requests[request_id]
             req.completed = True
             req.completed_ms = event.timestamp_ms
+            self._notify_request_finished(req, status="completed", timestamp_ms=event.timestamp_ms)
 
     def _handle_step_ready(self, event: Event) -> None:
         request_id = event.payload["request_id"]
@@ -188,14 +201,52 @@ class SimulationRunner:
             req.timed_out = True
             req.failed_reason = "timeout"
             req.completed_ms = event.timestamp_ms
+            self._notify_request_finished(req, status="timeout", timestamp_ms=event.timestamp_ms)
             return
         if req.current_index >= len(req.path):
             req.completed = True
             req.completed_ms = event.timestamp_ms
+            self._notify_request_finished(req, status="completed", timestamp_ms=event.timestamp_ms)
             return
 
         function_node = req.path[req.current_index]
+        self._autoscaler.on_step_start(
+            request_id=req.request_id,
+            um=req.um,
+            function_node=function_node,
+            timestamp_ms=event.timestamp_ms,
+            true_future_path=tuple(req.path[req.current_index + 1 :]),
+        )
         profile = self._profile_for(function_node)
+
+        if self._autoscaler.name == "oracle_future_v1":
+            warm_container, created_now = self._acquire_oracle_warm_container(
+                function_node=function_node,
+                profile=profile,
+                timestamp_ms=event.timestamp_ms,
+            )
+            if warm_container is None:
+                self._mark_capacity_exhausted(
+                    req=req,
+                    timestamp_ms=event.timestamp_ms,
+                    function_node=function_node,
+                    reason="oracle_capacity_exhausted",
+                )
+                return
+            self._schedule_step_execution(
+                timestamp_ms=event.timestamp_ms,
+                req=req,
+                function_node=function_node,
+                container=warm_container,
+                profile=profile,
+                decision_type="warm_reuse",
+                cold_start_ms=0,
+                reason=("oracle_proactive_prewarm" if created_now else "warm_container_available"),
+                state_before=CONTAINER_IDLE,
+                state_after=CONTAINER_RUNNING,
+            )
+            return
+
         warm_container = self._cluster.acquire_warm_container(
             function_node=function_node,
             now_ms=event.timestamp_ms,
@@ -264,6 +315,74 @@ class SimulationRunner:
             state_after=CONTAINER_COLD_STARTING,
         )
 
+    def _acquire_oracle_warm_container(
+        self,
+        *,
+        function_node: str,
+        profile: FunctionProfile,
+        timestamp_ms: int,
+    ) -> tuple[FunctionContainer | None, bool]:
+        warm = self._cluster.acquire_warm_container(
+            function_node=function_node,
+            now_ms=timestamp_ms,
+        )
+        if warm is not None:
+            return warm, False
+
+        if not self._has_global_container_capacity():
+            self._autoscaler.on_prewarm_create_result(
+                function_node=function_node,
+                success=False,
+                timestamp_ms=timestamp_ms,
+                reason="global_container_cap",
+            )
+            return None, False
+
+        host_id = self._select_least_loaded_host_for_cold_start(profile)
+        if host_id is None:
+            self._autoscaler.on_prewarm_create_result(
+                function_node=function_node,
+                success=False,
+                timestamp_ms=timestamp_ms,
+                reason="host_resource_exhausted",
+            )
+            return None, False
+
+        container = self._cluster.create_cold_container_on_host(
+            host_id=host_id,
+            function_node=function_node,
+            cpu_request_mcpu=profile.cpu_request_mcpu,
+            memory_mb=profile.memory_mb,
+            now_ms=timestamp_ms,
+            prewarm_source=self._autoscaler.name,
+        )
+        if container is None:
+            self._autoscaler.on_prewarm_create_result(
+                function_node=function_node,
+                success=False,
+                timestamp_ms=timestamp_ms,
+                reason="host_resource_exhausted",
+            )
+            return None, False
+
+        self._autoscaler.on_prewarm_create_result(
+            function_node=function_node,
+            success=True,
+            timestamp_ms=timestamp_ms,
+            reason="oracle_instant_prewarm",
+        )
+        self._cluster.set_container_idle(container.container_id, timestamp_ms)
+        self._autoscaler.on_prewarm_ready(
+            function_node=function_node,
+            container_id=container.container_id,
+            timestamp_ms=timestamp_ms,
+        )
+        warm = self._cluster.acquire_warm_container(
+            function_node=function_node,
+            now_ms=timestamp_ms,
+        )
+        return warm, True
+
     def _schedule_step_execution(
         self,
         *,
@@ -325,7 +444,19 @@ class SimulationRunner:
             req.failed_reason = "timeout"
             req.completed_ms = event.timestamp_ms
             self._cluster.release_container(container_id, event.timestamp_ms)
+            self._notify_request_finished(req, status="timeout", timestamp_ms=event.timestamp_ms)
             return
+
+        if req.prev_function_node is not None and req.current_index > 0:
+            self._autoscaler.on_transition(
+                request_id=req.request_id,
+                um=req.um,
+                src_node=req.prev_function_node,
+                dst_node=function_node,
+                timestamp_ms=event.timestamp_ms,
+                transfer_ms=int(event.payload.get("transfer_ms", 0)),
+                prefix=tuple(req.path[: req.current_index]),
+            )
 
         self._cluster.set_container_running(container_id)
         profile = self._profile_for(function_node)
@@ -335,6 +466,18 @@ class SimulationRunner:
             allocated_cpu_mcpu=allocated_cpu_mcpu,
         )
         req.execution_latency_ms += execution_ms
+
+        if (
+            event.payload.get("decision_type") == "warm_reuse"
+            and self._cluster.has_unconsumed_prewarm(container_id, self._autoscaler.name)
+        ):
+            self._cluster.mark_prewarm_consumed(container_id)
+            self._autoscaler.on_prewarm_consumed(
+                function_node=function_node,
+                request_id=req.request_id,
+                container_id=container_id,
+                timestamp_ms=event.timestamp_ms,
+            )
 
         self._run_writer.log_scheduler_decision(
             timestamp_ms=int(event.payload["decision_timestamp_ms"]),
@@ -368,6 +511,9 @@ class SimulationRunner:
                 "function_node": function_node,
                 "container_id": container.container_id,
                 "host_id": container.host_id,
+                "execution_ms": execution_ms,
+                "cold_start_ms": int(event.payload.get("cold_start_ms", 0)),
+                "transfer_ms": int(event.payload.get("transfer_ms", 0)),
             },
         )
 
@@ -376,9 +522,18 @@ class SimulationRunner:
         function_node = event.payload["function_node"]
         container_id = event.payload["container_id"]
         host_id = event.payload["host_id"]
-        self._cluster.release_container(container_id, event.timestamp_ms)
-
         req = self._requests[request_id]
+        self._autoscaler.on_step_observed(
+            request_id=req.request_id,
+            um=req.um,
+            function_node=function_node,
+            timestamp_ms=event.timestamp_ms,
+            execution_ms=int(event.payload.get("execution_ms", 0)),
+            cold_start_ms=int(event.payload.get("cold_start_ms", 0)),
+            transfer_ms=int(event.payload.get("transfer_ms", 0)),
+            prefix=tuple(req.path[: req.current_index + 1]),
+        )
+        self._cluster.release_container(container_id, event.timestamp_ms)
         if req.completed or req.timed_out or req.failed_reason:
             return
 
@@ -386,6 +541,7 @@ class SimulationRunner:
             req.timed_out = True
             req.failed_reason = "timeout"
             req.completed_ms = event.timestamp_ms
+            self._notify_request_finished(req, status="timeout", timestamp_ms=event.timestamp_ms)
             return
 
         req.prev_host_id = host_id
@@ -394,8 +550,24 @@ class SimulationRunner:
         if req.current_index >= len(req.path):
             req.completed_ms = event.timestamp_ms
             req.completed = True
+            self._notify_request_finished(req, status="completed", timestamp_ms=event.timestamp_ms)
         else:
             self._push_event(event.timestamp_ms, "step_ready", {"request_id": request_id})
+
+    def _handle_prewarm_ready(self, event: Event) -> None:
+        container_id = event.payload["container_id"]
+        function_node = event.payload["function_node"]
+        container = self._cluster.get_container(container_id)
+        if container is None:
+            return
+        if container.state != CONTAINER_COLD_STARTING:
+            return
+        self._cluster.set_container_idle(container_id, event.timestamp_ms)
+        self._autoscaler.on_prewarm_ready(
+            function_node=function_node,
+            container_id=container_id,
+            timestamp_ms=event.timestamp_ms,
+        )
 
     def _profile_for(self, function_node: str) -> FunctionProfile:
         profile = self._function_profiles.get(function_node)
@@ -504,6 +676,7 @@ class SimulationRunner:
             allocated_cpu_mcpu=None,
             reason=reason,
         )
+        self._notify_request_finished(req, status="capacity_exhausted", timestamp_ms=timestamp_ms)
 
     def _run_housekeeping_until(self, timestamp_ms: int) -> None:
         target_sec = max(0, timestamp_ms // 1000)
@@ -513,8 +686,89 @@ class SimulationRunner:
                 now_ms=now_ms,
                 idle_ttl_sec=self._config.physical_nodes.idle_ttl_sec,
             )
+            self._run_autoscaler_tick(timestamp_sec=sec, timestamp_ms=now_ms)
             self._log_node_metrics(sec)
             self._last_housekeeping_sec = sec
+
+    def _run_autoscaler_tick(self, *, timestamp_sec: int, timestamp_ms: int) -> None:
+        ready_pool_by_function = self._cluster.ready_pool_counts_by_function()
+        idle_pool_by_function = self._cluster.idle_pool_counts_by_function()
+        plans = self._autoscaler.on_tick(
+            timestamp_sec=timestamp_sec,
+            timestamp_ms=timestamp_ms,
+            ready_pool_by_function=ready_pool_by_function,
+            idle_pool_by_function=idle_pool_by_function,
+        )
+        scale_down_plans = [plan for plan in plans if isinstance(plan, ScaleDownPlan)]
+        scale_up_plans = [plan for plan in plans if not isinstance(plan, ScaleDownPlan)]
+
+        for plan in scale_down_plans:
+            self._cluster.evict_idle_containers(
+                function_node=plan.function_node,
+                count=max(0, int(plan.count)),
+            )
+        for plan in scale_up_plans:
+            for _ in range(max(0, int(plan.count))):
+                self._create_prewarm_container(
+                    function_node=plan.function_node,
+                    timestamp_ms=timestamp_ms,
+                )
+
+    def _create_prewarm_container(
+        self,
+        *,
+        function_node: str,
+        timestamp_ms: int,
+    ) -> None:
+        profile = self._profile_for(function_node)
+        if not self._has_global_container_capacity():
+            self._autoscaler.on_prewarm_create_result(
+                function_node=function_node,
+                success=False,
+                timestamp_ms=timestamp_ms,
+                reason="global_container_cap",
+            )
+            return
+        host_id = self._select_least_loaded_host_for_cold_start(profile)
+        if host_id is None:
+            self._autoscaler.on_prewarm_create_result(
+                function_node=function_node,
+                success=False,
+                timestamp_ms=timestamp_ms,
+                reason="host_resource_exhausted",
+            )
+            return
+        container = self._cluster.create_cold_container_on_host(
+            host_id=host_id,
+            function_node=function_node,
+            cpu_request_mcpu=profile.cpu_request_mcpu,
+            memory_mb=profile.memory_mb,
+            now_ms=timestamp_ms,
+            prewarm_source=self._autoscaler.name,
+        )
+        if container is None:
+            self._autoscaler.on_prewarm_create_result(
+                function_node=function_node,
+                success=False,
+                timestamp_ms=timestamp_ms,
+                reason="host_resource_exhausted",
+            )
+            return
+        self._autoscaler.on_prewarm_create_result(
+            function_node=function_node,
+            success=True,
+            timestamp_ms=timestamp_ms,
+            reason="created",
+        )
+        cold_start_ms = self._quantize_duration(profile.cold_start_ms)
+        self._push_event(
+            timestamp_ms + cold_start_ms,
+            "prewarm_ready",
+            {
+                "container_id": container.container_id,
+                "function_node": function_node,
+            },
+        )
 
     def _log_node_metrics(self, timestamp_sec: int) -> None:
         for row in self._cluster.snapshot_node_metrics():
@@ -548,6 +802,13 @@ class SimulationRunner:
             if req.completed_ms is None and not req.timed_out and not req.failed_reason:
                 req.timed_out = True
                 req.failed_reason = "timeout"
+            if req.request_id not in self._autoscaler_finished_requests:
+                status = "completed" if req.completed else (req.failed_reason or "failed")
+                self._notify_request_finished(
+                    req,
+                    status=status,
+                    timestamp_ms=req.completed_ms if req.completed_ms is not None else req.arrival_ms,
+                )
             self._run_writer.log_request_path(
                 request_id=req.request_id,
                 session_id=req.session_id,
@@ -563,6 +824,22 @@ class SimulationRunner:
                 execution_latency_ms=req.execution_latency_ms,
                 queue_wait_latency_ms=req.queue_wait_latency_ms,
             )
+
+    def _notify_request_finished(
+        self,
+        req: RequestContext,
+        *,
+        status: str,
+        timestamp_ms: int,
+    ) -> None:
+        if req.request_id in self._autoscaler_finished_requests:
+            return
+        self._autoscaler_finished_requests.add(req.request_id)
+        self._autoscaler.on_request_finish(
+            request_id=req.request_id,
+            status=status,
+            timestamp_ms=timestamp_ms,
+        )
 
     def _build_summary(self) -> dict[str, Any]:
         total = len(self._requests)

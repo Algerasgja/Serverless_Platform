@@ -62,6 +62,9 @@ class ConditionalDagEngine:
         drifting_concentration: float = 200.0,
         drifting_floor: float = 1e-3,
         eps: float = 1e-9,
+        mode_preference_scale: float = 1.8,
+        coupling_preference_scale: float = 2.4,
+        path_noise_std: float = 0.15,
         base_seed: int = 0,
     ) -> None:
         if not templates:
@@ -92,6 +95,9 @@ class ConditionalDagEngine:
         self._drifting_concentration = max(0.0, float(drifting_concentration))
         self._drifting_floor = max(0.0, float(drifting_floor))
         self._eps = max(1e-12, float(eps))
+        self._mode_preference_scale = max(0.0, float(mode_preference_scale))
+        self._coupling_preference_scale = max(0.0, float(coupling_preference_scale))
+        self._path_noise_std = max(0.0, float(path_noise_std))
         self._base_seed = int(base_seed)
 
         self._path_models: dict[str, DagPathModel] = {}
@@ -158,6 +164,9 @@ class ConditionalDagEngine:
                 "drifting_concentration": self._drifting_concentration,
                 "drifting_floor": self._drifting_floor,
                 "eps": self._eps,
+                "mode_preference_scale": self._mode_preference_scale,
+                "coupling_preference_scale": self._coupling_preference_scale,
+                "path_noise_std": self._path_noise_std,
             },
             "per_um": per_um,
         }
@@ -314,10 +323,20 @@ class ConditionalDagEngine:
                 base_probs_by_split.append(base_probs)
 
             theta: list[list[list[float]]] = []
-            for _ in range(self._mode_count):
+            split_mode_prefs = self._build_split_mode_preferences(branches_by_split, rng)
+            for mode_idx in range(self._mode_count):
                 mode_theta: list[list[float]] = []
-                for branches in branches_by_split:
-                    mode_theta.append([rng.gauss(0.0, 1.0) for _ in branches])
+                for split_idx, branches in enumerate(branches_by_split):
+                    preferred = split_mode_prefs[split_idx][mode_idx]
+                    mode_theta.append(
+                        self._build_preference_logits(
+                            branch_count=len(branches),
+                            preferred_idx=preferred,
+                            scale=self._mode_preference_scale,
+                            noise_std=self._path_noise_std,
+                            rng=rng,
+                        )
+                    )
                 theta.append(mode_theta)
 
             coupling: dict[tuple[int, int], list[list[float]]] = {}
@@ -325,8 +344,17 @@ class ConditionalDagEngine:
                 for j in range(i + 1, len(branches_by_split)):
                     dst_branches = branches_by_split[j]
                     mat: list[list[float]] = []
-                    for _ in src_branches:
-                        mat.append([rng.gauss(0.0, 1.0) for _ in dst_branches])
+                    for src_idx, _ in enumerate(src_branches):
+                        preferred_dst = src_idx % max(1, len(dst_branches))
+                        mat.append(
+                            self._build_preference_logits(
+                                branch_count=len(dst_branches),
+                                preferred_idx=preferred_dst,
+                                scale=self._coupling_preference_scale,
+                                noise_std=self._path_noise_std,
+                                rng=rng,
+                            )
+                        )
                     coupling[(i, j)] = mat
 
             pi_fixed = _sample_dirichlet(
@@ -351,6 +379,40 @@ class ConditionalDagEngine:
                 next_refresh_sec=self._drifting_interval_sec,
             )
         return models
+
+    def _build_split_mode_preferences(
+        self,
+        branches_by_split: list[list[str]],
+        rng: random.Random,
+    ) -> list[list[int]]:
+        prefs: list[list[int]] = []
+        for branches in branches_by_split:
+            branch_count = max(1, len(branches))
+            ordering = list(range(branch_count))
+            rng.shuffle(ordering)
+            split_pref = [ordering[m % branch_count] for m in range(self._mode_count)]
+            prefs.append(split_pref)
+        return prefs
+
+    @staticmethod
+    def _build_preference_logits(
+        *,
+        branch_count: int,
+        preferred_idx: int,
+        scale: float,
+        noise_std: float,
+        rng: random.Random,
+    ) -> list[float]:
+        if branch_count <= 0:
+            return []
+        if branch_count == 1:
+            return [0.0]
+        chosen = max(0, min(int(preferred_idx), branch_count - 1))
+        logits = [-(scale / max(1, branch_count - 1)) for _ in range(branch_count)]
+        logits[chosen] = scale
+        if noise_std > 0.0:
+            logits = [v + rng.gauss(0.0, noise_std) for v in logits]
+        return logits
 
     def _ordered_split_nodes(self, template: DagTemplate) -> list[str]:
         transitions = template.transitions

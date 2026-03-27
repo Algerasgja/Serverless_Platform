@@ -107,6 +107,7 @@ def _load_function_profiles_from_file(
             if cpu_raw is None or str(cpu_raw).strip() == "":
                 cpu_request_mcpu = _derive_cpu_request_mcpu(
                     compute_data_mb=compute_data_mb,
+                    memory_mb=memory_mb,
                     runtime_cfg=runtime_cfg,
                 )
             else:
@@ -193,10 +194,24 @@ def _generate_cpu_intensive_profile(
     cold_min = min(runtime_cfg.function_cold_start_ms_min, runtime_cfg.function_cold_start_ms_max)
     cold_max = max(runtime_cfg.function_cold_start_ms_min, runtime_cfg.function_cold_start_ms_max)
 
-    cpu_request_mcpu = rng.randint(max(1, int(cpu_min)), max(1, int(cpu_max)))
-    memory_mb = rng.randint(max(1, int(mem_min)), max(1, int(mem_max)))
-    output_data_mb = rng.uniform(max(0.001, float(out_min)), max(0.001, float(out_max)))
-    compute_data_mb = rng.uniform(max(0.001, float(comp_min)), max(0.001, float(comp_max)))
+    out_low = max(0.001, float(out_min))
+    out_high = max(out_low, float(out_max))
+    comp_low = max(0.001, float(comp_min))
+    comp_high = max(comp_low, float(comp_max))
+    if comp_high <= comp_low:
+        compute_data_mb = comp_low
+    else:
+        ratio = rng.random()
+        compute_data_mb = comp_low * ((comp_high / comp_low) ** ratio)
+
+    compute_ratio = 0.0 if comp_high <= comp_low else (compute_data_mb - comp_low) / (comp_high - comp_low)
+    compute_ratio = min(1.0, max(0.0, compute_ratio))
+    mem_ratio = min(1.0, max(0.0, compute_ratio * 0.75 + rng.uniform(0.0, 0.35)))
+    cpu_ratio = min(1.0, max(0.0, compute_ratio * 0.80 + rng.uniform(0.0, 0.30)))
+
+    memory_mb = max(1, int(round(mem_min + mem_ratio * (mem_max - mem_min))))
+    cpu_request_mcpu = max(1, int(round(cpu_min + cpu_ratio * (cpu_max - cpu_min))))
+    output_data_mb = rng.uniform(out_low, out_high)
 
     cold_start_ms = rng.randint(max(1, int(cold_min)), max(1, int(cold_max)))
     throughput = max(
@@ -224,15 +239,22 @@ def _generate_cpu_intensive_profile(
 def _derive_cpu_request_mcpu(
     *,
     compute_data_mb: float,
+    memory_mb: int,
     runtime_cfg: RuntimeConfig,
 ) -> int:
     low = min(runtime_cfg.function_cpu_request_mcpu_min, runtime_cfg.function_cpu_request_mcpu_max)
     high = max(runtime_cfg.function_cpu_request_mcpu_min, runtime_cfg.function_cpu_request_mcpu_max)
     comp_low = min(runtime_cfg.function_compute_data_mb_min, runtime_cfg.function_compute_data_mb_max)
     comp_high = max(runtime_cfg.function_compute_data_mb_min, runtime_cfg.function_compute_data_mb_max)
-    if comp_high - comp_low <= 0.000001:
-        return max(1, int(low))
-    ratio = min(1.0, max(0.0, (compute_data_mb - comp_low) / (comp_high - comp_low)))
+    mem_low = min(runtime_cfg.function_memory_mb_min, runtime_cfg.function_memory_mb_max)
+    mem_high = max(runtime_cfg.function_memory_mb_min, runtime_cfg.function_memory_mb_max)
+    comp_ratio = 0.0
+    mem_ratio = 0.0
+    if comp_high - comp_low > 0.000001:
+        comp_ratio = min(1.0, max(0.0, (compute_data_mb - comp_low) / (comp_high - comp_low)))
+    if mem_high - mem_low > 0:
+        mem_ratio = min(1.0, max(0.0, (float(memory_mb) - mem_low) / float(mem_high - mem_low)))
+    ratio = min(1.0, max(0.0, 0.7 * comp_ratio + 0.3 * mem_ratio))
     return max(1, int(round(low + ratio * (high - low))))
 
 

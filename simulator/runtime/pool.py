@@ -20,6 +20,8 @@ class FunctionContainer:
     executing: bool = False
     warm: bool = False
     last_idle_ms: int | None = None
+    prewarm_source: str | None = None
+    prewarm_consumed: bool = False
 
     @property
     def busy(self) -> bool:
@@ -60,9 +62,7 @@ class PhysicalNode:
 
     @property
     def utilization(self) -> float:
-        if self.max_containers <= 0:
-            return 1.0
-        return self.busy_containers / self.max_containers
+        return max(self.cpu_utilization, self.mem_utilization)
 
     @property
     def cpu_utilization(self) -> float:
@@ -78,7 +78,7 @@ class PhysicalNode:
 
     @property
     def has_slot(self) -> bool:
-        return self.active_containers < self.max_containers
+        return True
 
     def has_resources_for(self, *, cpu_request_mcpu: int, memory_mb: int) -> bool:
         return (
@@ -169,9 +169,10 @@ class PhysicalCluster:
         cpu_request_mcpu: int,
         memory_mb: int,
         now_ms: int,
+        prewarm_source: str | None = None,
     ) -> FunctionContainer | None:
         node = self.nodes.get(host_id)
-        if node is None or (not node.has_slot):
+        if node is None:
             return None
         if not node.has_resources_for(cpu_request_mcpu=cpu_request_mcpu, memory_mb=memory_mb):
             return None
@@ -188,6 +189,8 @@ class PhysicalCluster:
             executing=False,
             warm=False,
             last_idle_ms=None,
+            prewarm_source=prewarm_source,
+            prewarm_consumed=False,
         )
         node.containers[container_id] = container
         node.cpu_reserved_mcpu += cpu_request_mcpu
@@ -231,7 +234,13 @@ class PhysicalCluster:
         if total_requested <= 0:
             return float(container.cpu_request_mcpu)
         fair_share = node.cpu_total_mcpu * (container.cpu_request_mcpu / total_requested)
-        return max(1.0, min(float(container.cpu_request_mcpu), float(fair_share)))
+        burst_cap = float(container.cpu_request_mcpu) * 1.25
+        allocated = max(1.0, min(float(burst_cap), float(fair_share)))
+        mem_util = node.mem_utilization
+        if mem_util > 0.85:
+            penalty_ratio = min(0.25, ((mem_util - 0.85) / 0.15) * 0.25)
+            allocated *= max(0.5, 1.0 - penalty_ratio)
+        return max(1.0, allocated)
 
     def reap_idle_containers(self, *, now_ms: int, idle_ttl_sec: int) -> int:
         ttl_ms = max(0, idle_ttl_sec) * 1000
@@ -281,6 +290,73 @@ class PhysicalCluster:
             )
         return rows
 
+    def ready_pool_counts_by_function(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for container in self._containers.values():
+            if container.state not in {CONTAINER_IDLE, CONTAINER_COLD_STARTING}:
+                continue
+            counts[container.function_node] = counts.get(container.function_node, 0) + 1
+        return counts
+
+    def idle_pool_counts_by_function(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for container in self._containers.values():
+            if container.state != CONTAINER_IDLE:
+                continue
+            counts[container.function_node] = counts.get(container.function_node, 0) + 1
+        return counts
+
+    def has_unconsumed_prewarm(self, container_id: str, source: str) -> bool:
+        container = self._containers.get(container_id)
+        if container is None:
+            return False
+        return container.prewarm_source == source and not container.prewarm_consumed
+
+    def mark_prewarm_consumed(self, container_id: str) -> None:
+        container = self._containers.get(container_id)
+        if container is None:
+            return
+        container.prewarm_consumed = True
+
+    def set_container_idle(self, container_id: str, now_ms: int) -> None:
+        self.release_container(container_id, now_ms)
+
+    def evict_idle_containers(
+        self,
+        *,
+        function_node: str,
+        count: int,
+    ) -> int:
+        target = max(0, int(count))
+        if target <= 0:
+            return 0
+
+        candidates: list[tuple[int, float, str]] = []
+        for node in self.nodes.values():
+            for container in node.idle_containers_for(function_node):
+                last_idle_ms = -1 if container.last_idle_ms is None else int(container.last_idle_ms)
+                candidates.append((last_idle_ms, -node.utilization, container.container_id))
+
+        candidates.sort(key=lambda item: (item[0], item[1], item[2]))
+        removed = 0
+        for _, _, container_id in candidates[:target]:
+            container = self._containers.get(container_id)
+            if container is None:
+                continue
+            if container.state != CONTAINER_IDLE:
+                continue
+            node = self.nodes.get(container.host_id)
+            if node is None:
+                continue
+            popped = node.containers.pop(container_id, None)
+            if popped is None:
+                continue
+            self._containers.pop(container_id, None)
+            node.cpu_reserved_mcpu = max(0, node.cpu_reserved_mcpu - popped.cpu_request_mcpu)
+            node.mem_reserved_mb = max(0, node.mem_reserved_mb - popped.memory_mb)
+            removed += 1
+        return removed
+
     def host_candidates_with_slot(
         self,
         *,
@@ -290,5 +366,5 @@ class PhysicalCluster:
         return [
             node
             for node in self.nodes.values()
-            if node.has_slot and node.has_resources_for(cpu_request_mcpu=cpu_request_mcpu, memory_mb=memory_mb)
+            if node.has_resources_for(cpu_request_mcpu=cpu_request_mcpu, memory_mb=memory_mb)
         ]

@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "dataset_source": "alibaba_cluster_trace_microservices_v2021",
+    "dataset_source": "alibaba_cluster_trace_microservices_v2018",
     "mode": "filtered_tasks_random_unique",
     "dag_tasks_file": "data\\raw\\filtered_tasks.csv",
     "dag_top_k": 20,

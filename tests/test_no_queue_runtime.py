@@ -1,4 +1,5 @@
 import csv
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -90,7 +91,7 @@ def _base_config(base: Path, *, node_latency_ms: int, cold_start_ms: int) -> Sim
         ),
         scheduler=SchedulerConfig(type="least_load"),
         autoscaler=AutoscalerConfig(
-            type="hpa_v1",
+            type="kpa_v1",
             target_utilization=0.7,
             sync_period_sec=15,
             scale_down_stabilization_sec=60,
@@ -107,6 +108,20 @@ def _single_fn_corpus(latency_ms: int) -> DagCorpus:
         um="u1",
         transitions={"__start__": {"fn": 1.0}},
         node_latency_ms={"fn": latency_ms},
+    )
+    return DagCorpus(
+        templates={"u1": template},
+        um_weights={"u1": 1.0},
+        replay_total_qps_per_minute=[60.0],
+        metadata={"source": "unit_test"},
+    )
+
+
+def _two_step_corpus(latency_ms: int) -> DagCorpus:
+    template = DagTemplate(
+        um="u1",
+        transitions={"__start__": {"A": 1.0}, "A": {"B": 1.0}},
+        node_latency_ms={"A": latency_ms, "B": latency_ms},
     )
     return DagCorpus(
         templates={"u1": template},
@@ -178,6 +193,141 @@ class NoQueueRuntimeTests(unittest.TestCase):
             with (run_dir / "request_paths.csv").open("r", encoding="utf-8", newline="") as f:
                 req_rows = list(csv.DictReader(f))
             self.assertTrue(any(row["failed_reason"] == "capacity_exhausted" for row in req_rows))
+
+    def test_cpu_memory_capacity_ignores_legacy_slot_cap(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            cfg = _base_config(base, node_latency_ms=50, cold_start_ms=20)
+            cfg.capacity.max_total_instances = 2
+            cfg.physical_nodes.max_containers_per_node = 1
+            cfg.physical_nodes.cpu_total_mcpu_per_node = 4000
+            cfg.physical_nodes.mem_total_mb_per_node = 2048
+            cfg.runtime.function_cpu_request_mcpu_min = 1000
+            cfg.runtime.function_cpu_request_mcpu_max = 1000
+            cfg.runtime.function_memory_mb_min = 256
+            cfg.runtime.function_memory_mb_max = 256
+            cfg.runtime.function_compute_data_mb_min = 10.0
+            cfg.runtime.function_compute_data_mb_max = 10.0
+            cfg.runtime.function_cold_start_ms_min = 100
+            cfg.runtime.function_cold_start_ms_max = 100
+            cfg.runtime.cold_start_ratio_floor = 0.0
+
+            corpus = _single_fn_corpus(latency_ms=50)
+            with patch("simulator.simulation.generate_arrivals", return_value=[(0, "u1"), (1, "u1")]):
+                run_dir = Path(SimulationRunner(cfg, corpus).run())
+
+            with (run_dir / "request_paths.csv").open("r", encoding="utf-8", newline="") as f:
+                req_rows = list(csv.DictReader(f))
+            self.assertTrue(all(row["failed_reason"] != "capacity_exhausted" for row in req_rows))
+
+            with (run_dir / "scheduler_decisions.csv").open("r", encoding="utf-8", newline="") as f:
+                sch_rows = list(csv.DictReader(f))
+            self.assertGreaterEqual(sum(1 for row in sch_rows if row["decision_type"] == "cold_start"), 2)
+
+    def test_kpa_scale_down_reclaims_idle_before_ttl(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            cfg = _base_config(base, node_latency_ms=10, cold_start_ms=5)
+            cfg.capacity.max_total_instances = 4
+            cfg.physical_nodes.max_containers_per_node = 1
+            cfg.physical_nodes.cpu_total_mcpu_per_node = 4000
+            cfg.physical_nodes.mem_total_mb_per_node = 4096
+            cfg.physical_nodes.idle_ttl_sec = 300
+            cfg.autoscaler.type = "kpa_v1"
+            cfg.autoscaler.sync_period_sec = 1
+            cfg.autoscaler.target_utilization = 1.0
+            cfg.autoscaler.kpa_target_concurrency = 1.0
+            cfg.autoscaler.kpa_stable_window_sec = 1
+            cfg.autoscaler.kpa_panic_window_sec = 1
+            cfg.autoscaler.kpa_panic_threshold = 10.0
+            cfg.autoscaler.min_replicas = 0
+            cfg.autoscaler.max_replicas_per_node = 10
+
+            corpus = _single_fn_corpus(latency_ms=10)
+            with patch("simulator.simulation.generate_arrivals", return_value=[(0, "u1")]):
+                run_dir = Path(SimulationRunner(cfg, corpus).run())
+
+            with (run_dir / "node_metrics.csv").open("r", encoding="utf-8", newline="") as f:
+                node_rows = list(csv.DictReader(f))
+            sec1_rows = [row for row in node_rows if row["timestamp_sec"] == "1"]
+            self.assertTrue(sec1_rows)
+            self.assertTrue(all(row["active_containers"] == "0" for row in sec1_rows))
+
+            with (run_dir / "summary.json").open("r", encoding="utf-8") as f:
+                summary = json.load(f)
+            self.assertGreater(summary.get("kpa", {}).get("scale_down_requested", 0), 0)
+
+    def test_xanadu_prewarm_requires_cold_start_then_can_be_consumed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            cfg = _base_config(base, node_latency_ms=20, cold_start_ms=1500)
+            cfg.capacity.max_total_instances = 10
+            cfg.physical_nodes.count = 2
+            cfg.physical_nodes.max_containers_per_node = 5
+            cfg.physical_nodes.cpu_total_mcpu_per_node = 4000
+            cfg.physical_nodes.mem_total_mb_per_node = 4096
+            cfg.runtime.function_cpu_request_mcpu_min = 1000
+            cfg.runtime.function_cpu_request_mcpu_max = 1000
+            cfg.runtime.function_memory_mb_min = 256
+            cfg.runtime.function_memory_mb_max = 256
+            cfg.runtime.function_compute_data_mb_min = 1.0
+            cfg.runtime.function_compute_data_mb_max = 1.0
+            cfg.runtime.function_cold_start_ms_min = 1500
+            cfg.runtime.function_cold_start_ms_max = 1500
+            cfg.runtime.cold_start_ratio_floor = 0.0
+            cfg.autoscaler.type = "xanadu_v1"
+            cfg.autoscaler.sync_period_sec = 1
+            cfg.autoscaler.xanadu_depth = 1
+            cfg.autoscaler.xanadu_ewma_alpha = 0.2
+
+            corpus = _two_step_corpus(latency_ms=20)
+            with patch(
+                "simulator.simulation.generate_arrivals",
+                return_value=[(0, "u1"), (3000, "u1")],
+            ):
+                run_dir = Path(SimulationRunner(cfg, corpus).run())
+
+            with (run_dir / "summary.json").open("r", encoding="utf-8") as f:
+                summary = json.load(f)
+            xanadu = summary.get("xanadu", {})
+            self.assertEqual("xanadu_v1", xanadu.get("type"))
+            self.assertGreater(xanadu.get("prewarm_created", 0), 0)
+            self.assertGreater(xanadu.get("prewarm_ready", 0), 0)
+            self.assertGreater(xanadu.get("prewarm_consumed", 0), 0)
+
+    def test_hpwp_reconcile_prewarm_behaves_like_xanadu(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            cfg = _base_config(base, node_latency_ms=20, cold_start_ms=800)
+            cfg.capacity.max_total_instances = 20
+            cfg.physical_nodes.count = 2
+            cfg.physical_nodes.max_containers_per_node = 10
+            cfg.autoscaler.type = "hpwp_v1"
+            cfg.autoscaler.sync_period_sec = 1
+            cfg.runtime.function_cold_start_ms_min = 800
+            cfg.runtime.function_cold_start_ms_max = 800
+            cfg.runtime.function_compute_data_mb_min = 2.0
+            cfg.runtime.function_compute_data_mb_max = 2.0
+            cfg.runtime.cold_start_ratio_floor = 0.0
+
+            corpus = _two_step_corpus(latency_ms=20)
+            with patch(
+                "simulator.simulation.generate_arrivals",
+                return_value=[(0, "u1"), (200, "u1"), (400, "u1")],
+            ):
+                run_dir = Path(SimulationRunner(cfg, corpus).run())
+
+            with (run_dir / "summary.json").open("r", encoding="utf-8") as f:
+                summary = json.load(f)
+            hpwp = summary.get("hpwp", {})
+            self.assertEqual("hpwp_v1", hpwp.get("type"))
+            self.assertEqual("active_reconcile", hpwp.get("mode"))
+            self.assertGreater(hpwp.get("prewarm_create_attempted", 0), 0)
+            self.assertGreaterEqual(
+                hpwp.get("prewarm_created", 0) + hpwp.get("capacity_blocked_creations", 0),
+                hpwp.get("prewarm_create_attempted", 0),
+            )
+            self.assertIn("final_desired_by_function", hpwp)
 
 
 if __name__ == "__main__":

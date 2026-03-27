@@ -31,6 +31,21 @@ def parse_args() -> argparse.Namespace:
         help="Output image name",
     )
 
+    p_compare = subparsers.add_parser(
+        "e2e-compare",
+        help="Plot E2E latency grouped bars (avg/p50/p99) across run configs.",
+    )
+    p_compare.add_argument(
+        "--run-dirs",
+        nargs="*",
+        help="Run directory paths or names under runs/. If omitted, use latest run.",
+    )
+    p_compare.add_argument(
+        "--out",
+        default="e2e_latency_compare.png",
+        help="Output image path or image name under runs/",
+    )
+
     return parser.parse_args()
 
 
@@ -254,6 +269,113 @@ def plot_latency_breakdown(run_dirs: list[Path], out_name: str) -> tuple[list[Pa
     return out_paths, stats, warnings
 
 
+def _compare_label(run_dir: Path) -> str:
+    summary_path = run_dir / "summary.json"
+    if summary_path.exists():
+        with summary_path.open("r", encoding="utf-8") as f:
+            summary = json.load(f)
+        autoscaler = str(summary.get("autoscaler", "")).lower()
+        mapping = {
+            "hpwp_v1": "hpwp",
+            "kpa_v1": "kpa",
+            "hpa_v1": "kpa",
+            "xanadu_v1": "xanadu",
+            "hist_keepalive_prewarm_v1": "hist",
+        }
+        if autoscaler in mapping:
+            return mapping[autoscaler]
+        if autoscaler:
+            return autoscaler
+    name = run_dir.name
+    if "_" in name:
+        return name.split("_", 1)[1]
+    return load_run_label(run_dir)
+
+
+def _load_summary_latency(run_dir: Path) -> tuple[float, float]:
+    summary_path = run_dir / "summary.json"
+    if not summary_path.exists():
+        raise FileNotFoundError(f"missing summary.json in {run_dir}")
+    with summary_path.open("r", encoding="utf-8") as f:
+        summary = json.load(f)
+    item = summary.get("summary", {})
+    p50 = item.get("p50_latency_ms")
+    p99 = item.get("p99_latency_ms")
+    if p50 is None or p99 is None:
+        raise RuntimeError(f"{run_dir} summary.json missing p50/p99 latency")
+    return float(p50), float(p99)
+
+
+def plot_e2e_compare(run_dirs: list[Path], out_name: str) -> tuple[Path, list[dict[str, Any]], list[str]]:
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:
+        raise RuntimeError("matplotlib is required for plotting; install with .[analysis]") from exc
+
+    stats: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for run_dir in run_dirs:
+        try:
+            breakdown = load_latency_breakdown(run_dir)
+            p50, p99 = _load_summary_latency(run_dir)
+            stats.append(
+                {
+                    "run_dir": run_dir,
+                    "label": _compare_label(run_dir),
+                    "avg": float(breakdown["avg_total"]),
+                    "p50": p50,
+                    "p99": p99,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - keep plotting resilient for mixed runs.
+            warnings.append(f"skip {run_dir}: {exc}")
+
+    if not stats:
+        raise RuntimeError("no compatible run directories for e2e compare")
+
+    x = list(range(len(stats)))
+    width = 0.24
+    avg_vals = [item["avg"] for item in stats]
+    p50_vals = [item["p50"] for item in stats]
+    p99_vals = [item["p99"] for item in stats]
+    labels = [item["label"] for item in stats]
+
+    fig, ax = plt.subplots(figsize=(max(10, len(stats) * 1.6), 6))
+    bars_avg = ax.bar([v - width for v in x], avg_vals, width=width, color="#4E79A7", label="Avg E2E")
+    bars_p50 = ax.bar(x, p50_vals, width=width, color="#59A14F", label="P50")
+    bars_p99 = ax.bar([v + width for v in x], p99_vals, width=width, color="#E15759", label="P99")
+
+    for bars in (bars_avg, bars_p50, bars_p99):
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                height + 2.0,
+                f"{height:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+            )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=15, ha="right")
+    ax.set_ylabel("Latency (ms)")
+    ax.set_title("E2E Latency Comparison by Configuration")
+    ax.grid(axis="y", alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+
+    out_token = Path(out_name)
+    if out_token.is_absolute() or str(out_token.parent) != ".":
+        out_path = out_token
+    else:
+        out_path = run_dirs[0].parent / out_name
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150)
+    plt.close(fig)
+    return out_path, stats, warnings
+
+
 def main() -> int:
     args = parse_args()
     if args.command == "timeseries":
@@ -278,6 +400,19 @@ def main() -> int:
                     f"execution={item['avg_execution']:.2f}ms, queue_wait={item['avg_queue']:.2f}ms, "
                     f"requests={item['count']}, completed={item['completed_count']}"
                 )
+            )
+        return 0
+
+    if args.command == "e2e-compare":
+        tokens = args.run_dirs if args.run_dirs else [None]
+        run_dirs = [resolve_run_dir(token) for token in tokens]
+        out_path, stats, warnings = plot_e2e_compare(run_dirs, args.out)
+        print(f"saved: {out_path}")
+        for warning in warnings:
+            print(f"warning: {warning}")
+        for item in stats:
+            print(
+                f"{item['label']}: avg={item['avg']:.2f}ms, p50={item['p50']:.2f}ms, p99={item['p99']:.2f}ms"
             )
         return 0
 

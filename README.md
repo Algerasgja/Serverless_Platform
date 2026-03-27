@@ -30,8 +30,29 @@ runs/<timestamp>_<scheduler>_<autoscaler>/
 4. 生成图表
 
 ```powershell
-python analysis/plot.py timeseries --run-dir runs/<timestamp>_least_load_hpa_v1
-python analysis/plot.py latency-breakdown --run-dirs runs/<timestamp>_least_load_hpa_v1
+python analysis/plot.py timeseries --run-dir runs/<timestamp>_least_load_kpa_v1
+python analysis/plot.py latency-breakdown --run-dirs runs/<timestamp>_least_load_kpa_v1
+python analysis/plot.py e2e-compare --run-dirs runs/<runA> runs/<runB> --out e2e_compare.png
+python analysis/compare_experiments.py --configs configs/default.yaml
+python analysis/ablation_experiments.py --config configs/default.yaml
+python analysis/hparam_experiments.py --config configs/default.yaml
+```
+
+三类实验脚本默认会把图和汇总 CSV 输出到 `results/`（与 `runs/` 平级），并直接覆盖同名结果文件。
+其中对比实验已统一为单套并支持按指标/场景/方法做局部更新：
+- 默认方法：`conscale(hpwp)/xunadu(=xanadu_opt_v1)/oracle/dbw/kraken_vomm/kpa`
+- 已移出当前对比：`xanadu_v1`（旧版）、`hist`、`na`
+- 不传 `--metrics`：执行全部指标并输出到 `results/compare/*`
+- 传 `--metrics e2e_bundle cold_start_step_rate`：仅更新对应指标数据和图
+- 传 `--scenarios low` 或 `--autoscalers hpwp_v1 kpa_v1`：仅重跑局部设置，并合并更新结果快照
+
+示例：
+```powershell
+python analysis/compare_experiments.py --configs configs/default.yaml --metrics e2e_bundle
+python analysis/compare_experiments.py --configs configs/default.yaml --scenarios low --autoscalers hpwp_v1 kpa_v1 --metrics prewarm_cost
+# 仅基于已生成的 metrics CSV 重绘图像（不重新跑实验）
+python analysis/plot_metrics_from_csv.py
+python analysis/plot_metrics_from_csv.py --metrics e2e_bundle prewarm_cost
 ```
 
 ## 真实数据接入
@@ -45,6 +66,7 @@ python analysis/plot.py latency-breakdown --run-dirs runs/<timestamp>_least_load
 
 实验设置说明：
 - `docs/plans/experimental-setup-real-data.md`
+- `docs/plans/hpwp-experiment-suite.md`
 
 默认 DAG 选择：
 - `dataset.dag_selection_mode = random_unique`（在唯一结构集合中随机抽取）

@@ -92,7 +92,7 @@ class SimulationOutputsTests(unittest.TestCase):
                 ),
                 scheduler=SchedulerConfig(type="least_load"),
                 autoscaler=AutoscalerConfig(
-                    type="hpa_v1",
+                    type="kpa_v1",
                     target_utilization=0.7,
                     sync_period_sec=5,
                     scale_down_stabilization_sec=30,
@@ -120,7 +120,7 @@ class SimulationOutputsTests(unittest.TestCase):
             with (run_dir / "summary.json").open("r", encoding="utf-8") as f:
                 summary = json.load(f)
             self.assertEqual("least_load", summary["scheduler"])
-            self.assertEqual("hpa_v1", summary["autoscaler"])
+            self.assertEqual("kpa_v1", summary["autoscaler"])
             self.assertIn("dataset_metadata", summary)
 
             with (run_dir / "request_paths.csv").open("r", encoding="utf-8", newline="") as f:

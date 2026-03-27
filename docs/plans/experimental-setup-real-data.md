@@ -1,83 +1,97 @@
-# 实验设置（当前模式）
+﻿# 真实数据实验设置（DAG + 负载 + 条件路径）
 
-## 1. 负载产生
+## 1. 数据来源与口径
 
-- 负载模式：`workload.mode = replay`
-- 输入数据：
+### 1.1 DAG 结构数据
+- 文件：`data/raw/filtered_tasks.csv`
+- 来源语义：Cluster-trace-v2018 任务级依赖记录
+- 解析粒度：`job_name` 级 DAG
+
+### 1.2 负载统计数据
+- 文件：
   - `data/real-world-emulation/CDFs/invokesCDF.csv`
   - `data/real-world-emulation/CDFs/CVs.csv`
-- 生成流程：
-  1. 每个 DAG 独立采样 `(avg_iat, cv)`。
-  2. 以 `lognormal` 生成 IAT 序列，毫秒级推进到达事件。
-  3. 按 `rate_multiplier` 缩放强度：
-     - `effective_iat_ms = base_iat_ms / rate_multiplier`
-- 可复现性：
-  - 每个 DAG 使用独立子种子：
-    - `experiment.random_seed + workload.realworld_seed_offset + dag_index`
+- 来源语义：ServerlessBench Real-World-App-Emulation 的调用频率与变异系数统计
 
-## 2. DAG 结构来源
+### 1.3 缺失数据行为
+当 `workload.mode=replay` 时，上述数据缺失将直接报错，不回退为合成数据。
 
-- 数据文件：`data/raw/filtered_tasks.csv`
-- 解析规则：
-  - 按 `job_name` 聚合 job 级 DAG。
-  - 从 `task_name` 抽取数字任务号与依赖号，脏格式行可跳过并计数。
-- 结构选择：
-  - 唯一结构去重（同构签名）。
-  - 排序：`node_count DESC -> edge_count DESC -> support_count DESC -> signature ASC`
-  - 取 Top-K，默认 `dataset.dag_top_k = 20`
-- 模板命名：`dag_0001 ... dag_0020`
+## 2. DAG 接入与筛选流程
 
-## 3. 请求路径与上下文模式
+### 2.1 task_name 依赖解析
+平台从 `task_name` 中提取“任务编号 + 依赖编号”，仅数字部分参与依赖构建；支持如下脏格式：
+- `M5_3_4`
+- `R4_2_Stg9`
+- 尾部冗余下划线
 
-- 路径规则：`dag_policy.path_rule = mode_prefix_coupled_v1`
-- 请求语义：每个请求仅生成并执行一条 `root -> leaf` 路径。
-- 路径打分：
-  - `score = log(base_prob + eps) + mode_strength * theta + prefix_strength * prefix_term`
-  - `prefix_term` 来自“同一请求”已选前缀分支，按 `prefix_decay` 衰减，窗口 `prefix_window`
+非法格式行将记录并跳过，不中断整体构建。
 
-### 3.1 fixed（当前默认）
+### 2.2 唯一结构去重
+同一 job 的节点和边先去重，再基于规范化签名做“唯一结构”聚合：
+- 节点重映射（消除原始编号偏差）
+- 边集排序后构建结构签名
 
-- `dag_policy.context_regime = fixed`
-- 每个 DAG 的模式先验 `pi_fixed` 在整次运行中保持不变。
-- 体现“同 DAG 调用模式稳定”，同时保持请求内前缀影响后缀。
+### 2.3 结构排序与采样
+支持两种模式：
+- `topk_unique`：按复杂度优先选择
+- `random_unique`：在唯一结构集合中按固定种子随机抽取
 
-### 3.2 drifting（可切换）
+当前默认：
+- `dag_selection_mode = random_unique`
+- `dag_top_k = 20`
+- `dag_selection_seed = 42`
 
-- `dag_policy.context_regime = drifting`
-- 每个 DAG 维护 `pi_cur` 与 `pi_target`：
-  - 按 `drifting_interval_sec` 刷新目标分布
-  - 按 `drifting_strength` 平滑逼近目标
-- 体现“调用模式随运行逐步变化”。
+## 3. replay 负载生成
 
-## 4. 当前关键配置
+### 3.1 先验参数采样
+对每个 DAG 独立采样 `(avg_iat, cv)`：
+- `avg_iat` 来自 invokes CDF
+- `cv` 来自 CV CDF
 
-`configs/default.yaml`：
+### 3.2 到达过程
+每个 DAG 使用独立续更新过程（renewal process）生成请求到达：
+- IAT 分布：lognormal（由 `mean + cv` 推导）
+- 时间精度：毫秒级
+- 最终多 DAG 到达流按时间戳归并
 
-```yaml
-dataset:
-  dag_tasks_file: data/raw/filtered_tasks.csv
-  dag_top_k: 20
+### 3.3 负载缩放
+`rate_multiplier` 直接作用于 IAT：
+- `effective_iat_ms = base_iat_ms / rate_multiplier`
+- `rate_multiplier <= 0` 时不产生请求
 
-workload:
-  mode: replay
-  invokes_cdf_file: data/real-world-emulation/CDFs/invokesCDF.csv
-  cvs_cdf_file: data/real-world-emulation/CDFs/CVs.csv
-  rate_multiplier: 0.0001
-  realworld_seed_offset: 303
+## 4. 条件路径生成与上下文模式
 
-dag_policy:
-  path_rule: mode_prefix_coupled_v1
-  context_regime: fixed
-  mode_count: 3
-  mode_strength: 1.0
-  prefix_strength: 1.2
-  prefix_decay: 0.85
-  prefix_window: 3
-```
+### 4.1 路径规则
+- `dag_policy.path_rule = mode_prefix_coupled_v1`
+- 单请求仅生成并执行一条路径
 
-## 5. 结果产物
+### 4.2 前缀影响后缀
+同一请求内，前序分支选择会通过耦合项影响后续分支概率，形成上下文相关路径。
 
-- 输出目录：`runs/<timestamp>_<scheduler>_<autoscaler>/`
-- 当前重点文件：
-  - `request_paths.csv`（最终执行路径与时延）
-  - `summary.json`（含 `dag_selection`、`workload_replay_profile`、`path_model`）
+### 4.3 上下文模式
+- `fixed`：模式分布全程固定
+- `drifting`：模式分布随时间平滑漂移
+
+当前默认：
+- `context_drifting_enabled = true`
+- `context_regime = drifting`
+
+## 5. 可复现性约束
+- 主随机种子：`experiment.random_seed`
+- 子种子偏移：
+  - `workload.realworld_seed_offset`
+  - `dag_policy.coupling_seed_offset`
+  - 其他资源模型 seed offset（函数画像/带宽）
+
+同一配置与种子下，DAG 选择、请求到达与路径采样应保持可复现。
+
+## 6. 运行产物与追踪字段
+关键追踪文件：
+- `request_paths.csv`：路径与时延分解
+- `scheduler_decisions.csv`：步骤调度与冷启/复用决策
+- `summary.json`：
+  - `dag_selection`
+  - `workload_replay_profile`
+  - `path_model`
+
+该设计用于保证“数据来源可追溯、生成过程可解释、实验结果可复现”。
