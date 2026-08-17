@@ -9,7 +9,7 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -57,7 +57,11 @@ def parse_args() -> argparse.Namespace:
         default=[42, 43, 44],
         help="Repeated-run seeds.",
     )
-    parser.add_argument("--results-dir", default="results", help="Output directory.")
+    parser.add_argument(
+        "--results-dir",
+        default=None,
+        help="Output directory. Default: results/sensitivity/<param-slug>/latest",
+    )
     parser.add_argument("--python", default=sys.executable, help="Python executable.")
     return parser.parse_args()
 
@@ -262,7 +266,8 @@ def main() -> int:
         )
     )
 
-    results_dir = ensure_results_dir(root=root, relative=args.results_dir)
+    relative_results_dir = args.results_dir or f"results/sensitivity/{slug}/latest"
+    results_dir = ensure_results_dir(root=root, relative=relative_results_dir)
     csv_path = results_dir / f"sensitivity_{slug}.csv"
     write_csv(csv_path, rows)
     print(f"saved metrics: {csv_path}")
@@ -281,4 +286,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from analysis.compare_experiments import (  # noqa: E402
+from analysis.experiments.compare_experiments import (  # noqa: E402
     ALL_METRICS,
     METRIC_COLD_STEP_RATE,
     METRIC_CTRE95,

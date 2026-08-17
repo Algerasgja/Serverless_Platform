@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -62,7 +62,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--hparam-best",
-        default="results/hparam_best.yaml",
+        default="results/hparam/latest/hparam_best.yaml",
         help="Best HPWP hyperparameter file used to freeze key knobs.",
     )
     parser.add_argument(
@@ -72,7 +72,7 @@ def parse_args() -> argparse.Namespace:
         default=[42, 43],
         help="Repeated-run seeds. Default: 42 43 (fast iteration)",
     )
-    parser.add_argument("--results-dir", default="results", help="Output directory.")
+    parser.add_argument("--results-dir", default="results/ablation/latest", help="Output directory.")
     parser.add_argument("--python", default=sys.executable, help="Python executable.")
     return parser.parse_args()
 

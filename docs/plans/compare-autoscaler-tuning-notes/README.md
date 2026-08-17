@@ -5,7 +5,7 @@
 1. 快速复现实验时，按算法读取“先调哪些参数、再看哪些指标、如何判断是否过度”。
 2. 需要做定向优化时，减少盲目网格搜索，把调参动作约束到最关键的少量参数。
 
-当前覆盖算法（与 `analysis/compare_experiments.py` 默认对比集合一致）：
+当前覆盖算法（与 `analysis/experiments/compare_experiments.py` 默认对比集合一致）：
 
 - `ConScale (hpwp_v1)`：[hpwp-conscale.md](./hpwp-conscale.md)
 - `Xunadu (xanadu_opt_v1)`：[xanadu-opt.md](./xanadu-opt.md)
@@ -24,4 +24,3 @@
 3. 主看四个指标：`avg_e2e_ms_mean`、`p95_ms_mean`、`prewarm_cost_mean`、`prewarm_utilization_mean`。
 4. 若目标是“降低冷启动”，先看 `cold_start_step_rate_mean` 是否同步下降，避免仅靠增加容器数“硬压”延迟。
 5. 每次改动后只局部重跑该算法并覆盖快照，再决定下一步。
-

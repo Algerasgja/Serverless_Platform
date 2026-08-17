@@ -9,16 +9,22 @@ THIS_DIR = Path(__file__).resolve().parent
 if str(THIS_DIR) not in sys.path:
     sys.path.insert(0, str(THIS_DIR))
 
-from plot_cold_start_heatmap import plot as plot_cold_start_heatmap  # noqa: E402
-from plot_ctre95_matrix import plot as plot_ctre95_matrix  # noqa: E402
-from plot_memory_time_avg_load import plot as plot_memory_time_avg_load  # noqa: E402
-from plot_memory_time_diverging import plot as plot_memory_time_diverging  # noqa: E402
+try:
+    from .plot_cold_start_heatmap import plot as plot_cold_start_heatmap  # noqa: E402
+    from .plot_ctre95_matrix import plot as plot_ctre95_matrix  # noqa: E402
+    from .plot_memory_time_avg_load import plot as plot_memory_time_avg_load  # noqa: E402
+    from .plot_memory_time_diverging import plot as plot_memory_time_diverging  # noqa: E402
+except ImportError:  # pragma: no cover - direct script execution fallback.
+    from plot_cold_start_heatmap import plot as plot_cold_start_heatmap  # noqa: E402
+    from plot_ctre95_matrix import plot as plot_ctre95_matrix  # noqa: E402
+    from plot_memory_time_avg_load import plot as plot_memory_time_avg_load  # noqa: E402
+    from plot_memory_time_diverging import plot as plot_memory_time_diverging  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Plot new compare figures from existing metrics.")
     parser.add_argument("--metrics-dir", default="results/compare/metrics")
-    parser.add_argument("--out-dir", default="results/compare/new_plots")
+    parser.add_argument("--out-dir", default="results/compare/derived")
     return parser.parse_args()
 
 

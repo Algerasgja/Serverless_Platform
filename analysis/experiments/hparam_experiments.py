@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -101,7 +101,7 @@ def parse_args() -> argparse.Namespace:
         "--anchor-source",
         choices=["best", "default"],
         default="best",
-        help="Anchor source for candidate generation. Use default to ignore results/hparam_best.yaml.",
+        help="Anchor source for candidate generation. Use default to ignore results/hparam/latest/hparam_best.yaml.",
     )
     parser.add_argument(
         "--sample-seed",
@@ -130,9 +130,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--curate-only",
         action="store_true",
-        help="Skip simulation reruns and curate directly from existing results/hparam_metrics.csv.",
+        help="Skip simulation reruns and curate directly from existing results/hparam/latest/hparam_metrics.csv.",
     )
-    parser.add_argument("--results-dir", default="results", help="Output directory.")
+    parser.add_argument("--results-dir", default="results/hparam/latest", help="Output directory.")
     parser.add_argument("--python", default=sys.executable, help="Python executable.")
     return parser.parse_args()
 

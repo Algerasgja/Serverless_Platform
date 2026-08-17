@@ -7,7 +7,7 @@
 3. 下一轮直接按目标检索历史最优候选，缩短迭代时间。
 
 ## 工具
-新增脚本：`analysis/tuning_memory.py`
+脚本：`analysis/tools/tuning_memory.py`
 
 支持两个命令：
 1. `record`：记录当前轮次。
@@ -17,7 +17,7 @@
 示例（记录 Kraken 当前轮次）：
 
 ```powershell
-python analysis/tuning_memory.py record `
+python analysis/tools/tuning_memory.py record `
   --strategy kraken_vomm `
   --round-id kraken_mech_r1 `
   --config configs/default.yaml `
@@ -42,7 +42,7 @@ python analysis/tuning_memory.py record `
 示例 1：找“最接近比 ConScale 慢 10%”的历史轮次
 
 ```powershell
-python analysis/tuning_memory.py suggest `
+python analysis/tools/tuning_memory.py suggest `
   --strategy kraken_vomm `
   --objective near_gap_10 `
   --target-gap 10 `
@@ -52,7 +52,7 @@ python analysis/tuning_memory.py suggest `
 示例 2：找延迟最小轮次
 
 ```powershell
-python analysis/tuning_memory.py suggest `
+python analysis/tools/tuning_memory.py suggest `
   --strategy kraken_vomm `
   --objective min_avg_e2e `
   --top 5
@@ -61,7 +61,7 @@ python analysis/tuning_memory.py suggest `
 示例 3：找冷启动率最低轮次
 
 ```powershell
-python analysis/tuning_memory.py suggest `
+python analysis/tools/tuning_memory.py suggest `
   --strategy kraken_vomm `
   --objective min_cold_rate `
   --top 5
@@ -79,4 +79,3 @@ python analysis/tuning_memory.py suggest `
 1. 减少重复尝试相同参数区间。
 2. 降低历史信息丢失造成的回退成本。
 3. 提高“定向目标（如 +10% 劣化）”的命中速度。
-

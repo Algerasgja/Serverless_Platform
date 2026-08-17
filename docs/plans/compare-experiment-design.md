@@ -33,7 +33,7 @@
 - `prewarm_cost`：`prewarm_created`（扩容容器数）
 
 ## 5. 统一脚本与局部更新
-脚本：`analysis/compare_experiments.py`
+脚本：`analysis/experiments/compare_experiments.py`
 
 支持按子集局部重跑：
 - `--metrics`：只更新指定指标
@@ -53,12 +53,12 @@
 ## 7. 常用命令
 ```powershell
 # 全量（默认方法 + 全场景 + 全指标）
-python analysis/compare_experiments.py --configs configs/default.yaml
+python analysis/experiments/compare_experiments.py --configs configs/default.yaml
 
 # 局部：只更新 low 场景的 ConScale/KPA 的扩容成本
-python analysis/compare_experiments.py --configs configs/default.yaml --scenarios low --autoscalers hpwp_v1 kpa_v1 --metrics prewarm_cost
+python analysis/experiments/compare_experiments.py --configs configs/default.yaml --scenarios low --autoscalers hpwp_v1 kpa_v1 --metrics prewarm_cost
 
 # 仅重绘（不重跑仿真）
-python analysis/plot_metrics_from_csv.py
-python analysis/plot_metrics_from_csv.py --metrics e2e_bundle cold_start_step_rate
+python analysis/plotting/plot_metrics_from_csv.py
+python analysis/plotting/plot_metrics_from_csv.py --metrics e2e_bundle cold_start_step_rate
 ```

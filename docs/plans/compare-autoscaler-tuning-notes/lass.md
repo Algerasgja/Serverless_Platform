@@ -119,7 +119,7 @@ Final kept LaSS parameters in this round:
 
 Run command:
 ```powershell
-python analysis/compare_experiments.py --configs configs/default.yaml --autoscalers lass_v1 --scenarios low mid high --metrics all --seeds 42 43 44
+python analysis/experiments/compare_experiments.py --configs configs/default.yaml --autoscalers lass_v1 --scenarios low mid high --metrics all --seeds 42 43 44
 ```
 
 Observed result (vs ConScale/hpwp):

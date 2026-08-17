@@ -60,16 +60,16 @@
 2. `p95_ms_mean`（次目标，越小越好）
 
 ### 5.2 最优点输出
-排序第一的配置写入 `results/hparam_best.yaml`，并用于后续消融实验中的关键参数冻结。
+排序第一的配置写入 `results/hparam/latest/hparam_best.yaml`，并用于后续消融实验中的关键参数冻结。
 
 ## 6. 指标与可视化
 
 ### 6.1 指标文件
-- `results/hparam_metrics.csv`
+- `results/hparam/latest/hparam_metrics.csv`
 - 每行包含：聚合性能指标 + 对应超参数 + 运行状态
 
 ### 6.2 主图
-- `results/hparam_tradeoff.png`
+- `results/hparam/latest/hparam_tradeoff.png`
 - 图意：`AE(Avg E2E)` 与 `P95` 的性能权衡关系
 - 用途：观察参数点在性能空间中的分布、识别稳定优区与异常区
 
@@ -94,7 +94,7 @@
 点名由 `plot_tradeoff(...)` 内部按当前输入行顺序生成：
 - 规则：`T01, T02, ..., T24`（格式 `T{idx:02d}`）
 - 该顺序来自 `hparam_experiments.py` 里对结果按 `(avg_e2e_ms_mean, p95_ms_mean)` 排序后的顺序。
-- 图中仅显示短标签 `Txx`，完整参数仍在 `results/hparam_metrics.csv` 中查表。
+- 图中仅显示短标签 `Txx`，完整参数仍在 `results/hparam/latest/hparam_metrics.csv` 中查表。
 
 #### 右上角图例（Legend）解释
 右上角图例标题是 `B / Marks`，表示“`B` 参数组与点形状的映射关系”：
@@ -121,11 +121,11 @@
 
 ## 8. 复现实验命令
 ```powershell
-python analysis/hparam_experiments.py --config configs/default.yaml
+python analysis/experiments/hparam_experiments.py --config configs/default.yaml
 ```
 
 可选：
 ```powershell
-python analysis/hparam_experiments.py --config configs/default.yaml --trial-count 24 --sample-seed 20260313
-python analysis/hparam_experiments.py --config configs/default.yaml --seeds 42 43 44
+python analysis/experiments/hparam_experiments.py --config configs/default.yaml --trial-count 24 --sample-seed 20260313
+python analysis/experiments/hparam_experiments.py --config configs/default.yaml --seeds 42 43 44
 ```

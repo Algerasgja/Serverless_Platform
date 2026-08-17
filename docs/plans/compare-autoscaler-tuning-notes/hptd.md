@@ -6,7 +6,7 @@
 2. 在不显著抬高容器数的前提下，提升 `predictor_prewarm_utilization`（预热容器利用率）。
 
 评估方式保持不变：
-- 命令：`python analysis/compare_experiments.py --configs configs/default.yaml --autoscalers hptd_v1 --metrics all`
+- 命令：`python analysis/experiments/compare_experiments.py --configs configs/default.yaml --autoscalers hptd_v1 --metrics all`
 - 场景：`low/mid/high`
 - seeds：`42,43,44`
 - 统一记录文件：`results/compare/hptd_tuning_rounds.csv`
@@ -96,7 +96,7 @@
 3. Top-K 稀疏扩容（`hptd_topk_ratio=0.45`）
 
 单轮执行命令：
-`python analysis/compare_experiments.py --configs configs/default.yaml --autoscalers hptd_v1 --metrics all`
+`python analysis/experiments/compare_experiments.py --configs configs/default.yaml --autoscalers hptd_v1 --metrics all`
 
 结果（HPTD）：
 - `prewarm_cost_mean`：`169.33 / 232.67 / 379.33`（low/mid/high）
@@ -183,7 +183,7 @@
    - `hptd_request_assist_scale=1.8`
 
 执行口径：
-- 命令：`python analysis/compare_experiments.py --configs configs/default.yaml --autoscalers hptd_v1 --scenarios low mid high --metrics all --seeds 42 43 44`
+- 命令：`python analysis/experiments/compare_experiments.py --configs configs/default.yaml --autoscalers hptd_v1 --scenarios low mid high --metrics all --seeds 42 43 44`
 - 三档负载一起重跑并覆盖对比结果图与指标 CSV。
 
 结果（HPTD 相对 ConScale）：

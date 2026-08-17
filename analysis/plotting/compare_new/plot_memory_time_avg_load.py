@@ -3,21 +3,32 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from common import (
-    STRATEGY_COLORS,
-    STRATEGY_LABELS,
-    load_metric_rows,
-    parse_float,
-    setup_plot_font,
-    strategy_sort_key,
-    write_table,
-)
+try:
+    from .common import (
+        STRATEGY_COLORS,
+        STRATEGY_LABELS,
+        load_metric_rows,
+        parse_float,
+        setup_plot_font,
+        strategy_sort_key,
+        write_table,
+    )
+except ImportError:  # pragma: no cover - direct script execution fallback.
+    from common import (
+        STRATEGY_COLORS,
+        STRATEGY_LABELS,
+        load_metric_rows,
+        parse_float,
+        setup_plot_font,
+        strategy_sort_key,
+        write_table,
+    )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Plot memory_time_cost using average load (low/mid/high).")
     parser.add_argument("--metrics-dir", default="results/compare/metrics")
-    parser.add_argument("--out-dir", default="results/compare/new_plots")
+    parser.add_argument("--out-dir", default="results/compare/derived")
     return parser.parse_args()
 
 
@@ -96,4 +107,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

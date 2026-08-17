@@ -1,8 +1,8 @@
 import unittest
 from pathlib import Path
 
-from analysis.ablation_experiments import build_ablation_scenario_variants, build_ablation_variants
-from analysis.compare_experiments import (
+from analysis.experiments.ablation_experiments import build_ablation_scenario_variants, build_ablation_variants
+from analysis.experiments.compare_experiments import (
     METRIC_COLD_STEP_RATE,
     METRIC_E2E_BUNDLE,
     METRIC_PRED_PREWARM,
@@ -15,7 +15,7 @@ from analysis.compare_experiments import (
     required_autoscalers_for_metrics,
 )
 from analysis.experiment_common import RunMetric, aggregate_metrics, build_variant_configs
-from analysis.hparam_experiments import HPWP_DEFAULT_POINT, build_hparam_parameter_sets
+from analysis.experiments.hparam_experiments import HPWP_DEFAULT_POINT, build_hparam_parameter_sets
 
 
 class ExperimentSuiteTests(unittest.TestCase):

@@ -13,7 +13,7 @@ from typing import Any
 import yaml
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "default.yaml"
 DEFAULT_COMPARE = REPO_ROOT / "results" / "compare" / "compare_metrics.csv"
 DEFAULT_STORE_DIR = REPO_ROOT / "results" / "compare" / "tuning_memory"

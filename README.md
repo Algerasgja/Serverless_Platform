@@ -30,15 +30,19 @@ runs/<timestamp>_<scheduler>_<autoscaler>/
 4. 生成图表
 
 ```powershell
-python analysis/plot.py timeseries --run-dir runs/<timestamp>_least_load_kpa_v1
-python analysis/plot.py latency-breakdown --run-dirs runs/<timestamp>_least_load_kpa_v1
-python analysis/plot.py e2e-compare --run-dirs runs/<runA> runs/<runB> --out e2e_compare.png
-python analysis/compare_experiments.py --configs configs/default.yaml
-python analysis/ablation_experiments.py --config configs/default.yaml
-python analysis/hparam_experiments.py --config configs/default.yaml
+python analysis/plotting/plot.py timeseries --run-dir runs/<timestamp>_least_load_kpa_v1
+python analysis/plotting/plot.py latency-breakdown --run-dirs runs/<timestamp>_least_load_kpa_v1
+python analysis/plotting/plot.py e2e-compare --run-dirs runs/<runA> runs/<runB> --out e2e_compare.png
+python analysis/experiments/compare_experiments.py --configs configs/default.yaml
+python analysis/experiments/ablation_experiments.py --config configs/default.yaml
+python analysis/experiments/hparam_experiments.py --config configs/default.yaml
 ```
 
-三类实验脚本默认会把图和汇总 CSV 输出到 `results/`（与 `runs/` 平级），并直接覆盖同名结果文件。
+实验脚本按实验类型输出到 `results/` 下的分类目录，并直接覆盖同名结果文件。
+当前默认路径：
+- 对比实验：`results/compare/`
+- 超参数实验：`results/hparam/latest/`
+- 消融实验：`results/ablation/latest/`
 其中对比实验已统一为单套并支持按指标/场景/方法做局部更新：
 - 默认方法：`conscale(hpwp)/xunadu(=xanadu_opt_v1)/oracle/dbw/kraken_vomm/kpa`
 - 已移出当前对比：`xanadu_v1`（旧版）、`hist`、`na`
@@ -48,11 +52,11 @@ python analysis/hparam_experiments.py --config configs/default.yaml
 
 示例：
 ```powershell
-python analysis/compare_experiments.py --configs configs/default.yaml --metrics e2e_bundle
-python analysis/compare_experiments.py --configs configs/default.yaml --scenarios low --autoscalers hpwp_v1 kpa_v1 --metrics prewarm_cost
+python analysis/experiments/compare_experiments.py --configs configs/default.yaml --metrics e2e_bundle
+python analysis/experiments/compare_experiments.py --configs configs/default.yaml --scenarios low --autoscalers hpwp_v1 kpa_v1 --metrics prewarm_cost
 # 仅基于已生成的 metrics CSV 重绘图像（不重新跑实验）
-python analysis/plot_metrics_from_csv.py
-python analysis/plot_metrics_from_csv.py --metrics e2e_bundle prewarm_cost
+python analysis/plotting/plot_metrics_from_csv.py
+python analysis/plotting/plot_metrics_from_csv.py --metrics e2e_bundle prewarm_cost
 ```
 
 ## 真实数据接入

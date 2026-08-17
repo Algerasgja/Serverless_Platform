@@ -21,7 +21,7 @@
 该组件用于定义消融基线的行为边界，包括低上下文深度、严格门控、保守周期等。其意义是构造一个稳定、可复现、能力受限的起点，以便清晰测量后续组件带来的增量收益。没有该组件，消融会退化为参数混合对比，无法明确归因“到底是哪一类机制带来了提升”。
 
 ## 3. 三阶段消融编排（当前实际实现）
-脚本：`analysis/ablation_experiments.py --scheme progressive`
+脚本：`analysis/experiments/ablation_experiments.py --scheme progressive`
 
 | 阶段 | 组块名 | 启用机制 | 说明 |
 |---|---|---|---|
@@ -34,7 +34,7 @@
 ## 4. 控制变量与公平性设置
 
 ### 4.1 冻结关键超参数
-以下 5 个关键参数在全部阶段中强制一致，并从 `results/hparam_best.yaml` 读取：
+以下 5 个关键参数在全部阶段中强制一致，并从 `results/hparam/latest/hparam_best.yaml` 读取：
 - `hpwp_sched_eta_exec`
 - `hpwp_horizon_alpha`
 - `hpwp_beta_hi`
@@ -70,9 +70,9 @@
 - `delta_p99_vs_g0_pct`
 
 ## 6. 输出文件与图表
-- `results/ablation_metrics.csv`：按“场景+阶段”聚合统计
-- `results/ablation_pairwise.csv`：按同 seed 配对差分
-- `results/ablation_e2e.png`：三场景子图，展示 G0→G2 的 `Avg/P95/P99` 曲线与阶段差分标注
+- `results/ablation/latest/ablation_metrics.csv`：按“场景+阶段”聚合统计
+- `results/ablation/latest/ablation_pairwise.csv`：按同 seed 配对差分
+- `results/ablation/latest/ablation_e2e.png`：三场景子图，展示 G0→G2 的 `Avg/P95/P99` 曲线与阶段差分标注
 
 注：当前版本不再输出 `ablation_gain.png`。
 
@@ -83,15 +83,15 @@
 
 ## 8. 复现实验命令
 ```powershell
-python analysis/ablation_experiments.py --config configs/default.yaml
+python analysis/experiments/ablation_experiments.py --config configs/default.yaml
 ```
 
 快速单轮试探：
 ```powershell
-python analysis/ablation_experiments.py --config configs/default.yaml --seeds 42
+python analysis/experiments/ablation_experiments.py --config configs/default.yaml --seeds 42
 ```
 
 扩展统计轮次：
 ```powershell
-python analysis/ablation_experiments.py --config configs/default.yaml --seeds 42 43 44 45 46
+python analysis/experiments/ablation_experiments.py --config configs/default.yaml --seeds 42 43 44 45 46
 ```
