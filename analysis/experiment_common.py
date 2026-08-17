@@ -39,6 +39,16 @@ class RunMetric:
     cold_start_share: float
 
 
+def _setup_times_font(plt: Any) -> None:
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams["font.serif"] = [
+        "Times New Roman",
+        "Times",
+        "DejaVu Serif",
+    ]
+    plt.rcParams["axes.unicode_minus"] = False
+
+
 def repo_root() -> Path:
     return REPO_ROOT
 
@@ -428,6 +438,7 @@ def plot_progressive_e2e_by_scenario(
         import matplotlib.pyplot as plt
     except ImportError as exc:  # pragma: no cover - runtime dependency
         raise RuntimeError("matplotlib is required for plotting; install with .[analysis]") from exc
+    _setup_times_font(plt)
 
     if not rows:
         raise RuntimeError("no rows to plot")
@@ -450,7 +461,20 @@ def plot_progressive_e2e_by_scenario(
             ax.set_visible(False)
             continue
 
-        labels = [str(r.get("stage_id") or r.get("stage", "")) for r in srows]
+        label_map = {
+            "g0_base": "Base",
+            "g1_context": "Base + HCP",
+            "g2_context_phase_drift": "Base + HCP + SMM",
+            "G0": "Base",
+            "G1": "Base + HCP",
+            "G2": "Base + HCP + SMM",
+        }
+        labels: list[str] = []
+        for r in srows:
+            stage = str(r.get("stage", ""))
+            stage_id = str(r.get("stage_id", ""))
+            raw_label = str(r.get("stage_id") or r.get("stage", ""))
+            labels.append(label_map.get(stage, label_map.get(stage_id, raw_label)))
         x = list(range(len(srows)))
 
         avg = [float(r["avg_e2e_ms_mean"]) for r in srows]
@@ -479,17 +503,18 @@ def plot_progressive_e2e_by_scenario(
                     f"{delta:+.1f}%",
                     ha="center",
                     va="bottom",
-                    fontsize=10.5,
+                    fontsize=15.0,
                     fontweight="bold",
                     color=color,
                 )
 
         ax.set_xticks(x)
-        ax.set_xticklabels(labels)
-        ax.set_title(f"{scenario} load")
+        ax.set_xticklabels(labels, fontsize=14)
+        ax.tick_params(axis="y", labelsize=14)
+        ax.set_title(f"{scenario.upper()}", fontsize=18)
         ax.grid(axis="y", alpha=0.25)
         if idx == 0:
-            ax.set_ylabel("Latency (ms)")
+            ax.set_ylabel("Latency (ms)", fontsize=16)
 
     handles, legend_labels = axes[0].get_legend_handles_labels()
     fig.legend(
@@ -499,14 +524,7 @@ def plot_progressive_e2e_by_scenario(
         bbox_to_anchor=(0.5, 0.01),
         ncol=3,
         frameon=False,
-    )
-    fig.suptitle(title, y=0.975)
-    fig.text(
-        0.01,
-        0.07,
-        "Lower is better; labels show signed delta vs previous stage",
-        fontsize=9,
-        color="#4B5563",
+        fontsize=14,
     )
     fig.tight_layout(rect=(0.0, 0.11, 1.0, 0.94))
 
@@ -528,6 +546,7 @@ def plot_ablation_gain(
         from matplotlib.patches import Patch
     except ImportError as exc:  # pragma: no cover - runtime dependency
         raise RuntimeError("matplotlib is required for plotting; install with .[analysis]") from exc
+    _setup_times_font(plt)
 
     if not rows:
         raise RuntimeError("no rows to plot")
@@ -567,16 +586,17 @@ def plot_ablation_gain(
                     f"{h:.2f}%",
                     ha="center",
                     va="bottom" if h >= 0 else "top",
-                    fontsize=8,
+                    fontsize=13,
                 )
 
         ax.axhline(0, linestyle="--", linewidth=1.0, color="#6B7280")
         ax.set_xticks(x)
-        ax.set_xticklabels(labels)
-        ax.set_title(f"{scenario} load")
+        ax.set_xticklabels(labels, fontsize=14)
+        ax.tick_params(axis="y", labelsize=14)
+        ax.set_title(f"{scenario.upper()}", fontsize=18)
         ax.grid(axis="y", alpha=0.25)
         if idx == 0:
-            ax.set_ylabel("Delta vs G0 (%)")
+            ax.set_ylabel("Delta vs G0 (%)", fontsize=16)
 
     legend_handles = [
         Patch(facecolor="#2D6A4F", label="Avg improved (<=0)"),
@@ -584,9 +604,9 @@ def plot_ablation_gain(
         Patch(facecolor="#4C78A8", label="P95 improved (<=0)"),
         Patch(facecolor="#F58518", label="P95 regressed (>0)"),
     ]
-    fig.legend(handles=legend_handles, loc="upper center", ncol=2)
-    fig.suptitle(title, y=0.98)
-    fig.text(0.01, 0.02, "Negative values mean better latency", fontsize=9, color="#4B5563")
+    fig.legend(handles=legend_handles, loc="upper center", ncol=2, fontsize=14)
+    fig.suptitle(title, y=0.98, fontsize=22, fontweight="bold")
+    fig.text(0.01, 0.02, "Negative values mean better latency", fontsize=14, color="#4B5563")
     fig.tight_layout(rect=(0.0, 0.04, 1.0, 0.91))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -618,7 +618,7 @@ def main() -> int:
         plot_progressive_e2e_by_scenario(
             ok_rows,
             out_path=e2e_path,
-            title="HPWP 3-Stage Ablation by Load (Avg/P95/P99)",
+            title="Three-stage ablation result",
             scenario_order=SCENARIO_ORDER,
         )
         print(f"saved figure: {e2e_path}")

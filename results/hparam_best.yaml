@@ -1,29 +1,28 @@
-label: hpwp_29
+label: hpwp_01
 metrics:
-  avg_e2e_ms_mean: 2902.9444594788497
-  p50_ms_mean: 2597.8333333333335
-  p95_ms_mean: 5633.833333333331
-  p99_ms_mean: 7428.593333333327
+  avg_e2e_ms_mean: 2491.165300457305
+  p50_ms_mean: 2224.3333333333335
+  p95_ms_mean: 5017.599999999998
+  p99_ms_mean: 6812.106666666671
   success_rate_mean: 1.0
-  cold_start_share_mean: 0.4282947074131564
+  cold_start_share_mean: 0.522118772640413
 autoscaler_overrides:
-  type: hpwp_v1
-  hpwp_lmax_low: 2.0
-  hpwp_lmax_high: 4.0
-  hpwp_beta_hi: 60.0
-  hpwp_beta_lo: 10.0
+  hpwp_lmax_low: 2
+  hpwp_lmax_high: 4
+  hpwp_beta_hi: 40.0
+  hpwp_beta_lo: 8.0
   hpwp_alpha_exp: 0.8
-  hpwp_alpha_stable: 0.08
-  hpwp_sched_eta_exec: 0.425
-  hpwp_sched_min_sec: 1.0
-  hpwp_sched_max_sec: 15.0
-  hpwp_horizon_alpha: 3.5
+  hpwp_alpha_stable: 0.1
+  hpwp_sched_eta_exec: 0.4
+  hpwp_sched_min_sec: 1
+  hpwp_sched_max_sec: 15
+  hpwp_horizon_alpha: 2.2
   hpwp_urgency_epsilon_ms: 500.0
-  hpwp_phase_window_k: 30.0
-  hpwp_phase_n_min: 12.0
+  hpwp_phase_window_k: 30
+  hpwp_phase_n_min: 12
   hpwp_phase_var_threshold: 0.06
-  hpwp_drift_short_k: 30.0
-  hpwp_drift_long_k: 180.0
+  hpwp_drift_short_k: 30
+  hpwp_drift_long_k: 180
   hpwp_drift_delta_mr: 0.28
   hpwp_drift_tau_mr: 0.72
   hpwp_drift_branch_tau: 0.75
@@ -31,6 +30,5 @@ autoscaler_overrides:
   hpwp_default_exec_ms: 40.0
   hpwp_default_cold_ms: 800.0
   hpwp_default_trans_ms: 8.0
-  hpwp_seed_offset: 2027.0
-  hpwp_rho_mass: 0.7
-  hpwp_tau_p: 0.012
+  hpwp_seed_offset: 2027
+  type: hpwp_v1

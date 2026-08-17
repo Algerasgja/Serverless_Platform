@@ -1,0 +1,54 @@
+display_points: 12
+primary: p95
+secondary: avg
+best_label: hpwp_01
+labels:
+- hpwp_04
+- hpwp_05
+- hpwp_12
+- hpwp_02
+- hpwp_08
+- hpwp_09
+- hpwp_01
+- hpwp_07
+- hpwp_10
+- hpwp_03
+- hpwp_11
+- hpwp_06
+items:
+- label: hpwp_04
+  tier: near
+  rank: 1
+- label: hpwp_05
+  tier: near
+  rank: 2
+- label: hpwp_12
+  tier: mid
+  rank: 3
+- label: hpwp_02
+  tier: mid
+  rank: 4
+- label: hpwp_08
+  tier: near
+  rank: 5
+- label: hpwp_09
+  tier: near
+  rank: 6
+- label: hpwp_01
+  tier: best
+  rank: 7
+- label: hpwp_07
+  tier: mid
+  rank: 8
+- label: hpwp_10
+  tier: far
+  rank: 9
+- label: hpwp_03
+  tier: mid
+  rank: 10
+- label: hpwp_11
+  tier: far
+  rank: 11
+- label: hpwp_06
+  tier: far
+  rank: 12

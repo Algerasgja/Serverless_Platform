@@ -34,7 +34,6 @@ DEFAULT_AUTOSCALERS = [
     "xanadu_opt_v1",
     "oracle_future_v1",
     "depth_breadth_v1",
-    "hist_keepalive_prewarm_v1",
     "kraken_vomm_v1",
 ]
 ALIAS = {
@@ -63,8 +62,8 @@ STRATEGY_ORDER = [
     "hptd",
     "hist",
     "kpa",
-    "oracle",
     "depth_breadth",
+    "oracle",
     "xanadu_legacy",
     "no_as",
 ]
@@ -74,7 +73,7 @@ DISPLAY_LABEL = {
     "lass": "LaSS",
     "rl_q": "QLAS",
     "hptd": "HPTD",
-    "xanadu": "Xunadu",
+    "xanadu": "Xanadu",
     "xanadu_legacy": "Xunadu(v1)",
     "oracle": "Oracle",
     "depth_breadth": "DBW",
@@ -106,16 +105,41 @@ SCENARIO_COLORS = {
     "high": "#E45756",
 }
 
+# Strategy color palette (9-method compare)
+STRATEGY_COLORS = {
+    "hpwp": "#264653",  # 深海蓝绿
+    "xanadu": "#287271",  # 墨青绿
+    "kraken_vomm": "#2A9D8C",  # 湖水青
+    "lass": "#5FA49A",  # 灰调青绿
+    "rl_q": "#8AB07D",  # 鼠尾草绿
+    "hptd": "#E9C46B",  # 暖芥末黄
+    "kpa": "#F3A261",  # 杏橙色
+    "depth_breadth": "#D98573",  # 柔和珊瑚粉橘
+    "oracle": "#E66F51",  # 陶土橘红
+}
+DEFAULT_STRATEGY_COLOR = "#5B6E78"
+
+COMPARE_SUPTITLE_FS = 38
+COMPARE_SUBTITLE_FS = 32
+COMPARE_AXIS_LABEL_FS = 30
+COMPARE_TICK_FS = 26
+COMPARE_ANNOT_FS = 24
+COMPARE_LEGEND_FS = 26
+COMPARE_LEGEND_TITLE_FS = 28
+
 
 def _setup_plot_font(plt: Any) -> None:
-    plt.rcParams["font.sans-serif"] = [
-        "Microsoft YaHei",
-        "SimHei",
-        "Noto Sans CJK SC",
-        "Arial Unicode MS",
-        "DejaVu Sans",
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams["font.serif"] = [
+        "Times New Roman",
+        "Times",
+        "DejaVu Serif",
     ]
     plt.rcParams["axes.unicode_minus"] = False
+
+
+def _strategy_color(strategy: str) -> str:
+    return STRATEGY_COLORS.get(str(strategy), DEFAULT_STRATEGY_COLOR)
 
 
 def parse_args() -> argparse.Namespace:
@@ -536,20 +560,14 @@ def _filter_rows_by_strategy(rows: list[dict[str, Any]], allowed_strategies: set
 
 
 def _attach_ctre95(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    oracle_p95_by_scenario: dict[str, float] = {}
-    baseline_by_scenario: dict[str, tuple[str, float, float]] = {}
-    baseline_strategy = "hpwp"
+    oracle_by_scenario: dict[str, tuple[float, float]] = {}
 
     for row in rows:
         scenario = str(row.get("scenario", ""))
         strategy = str(row.get("strategy", ""))
-        if strategy == "oracle":
-            oracle_p95_by_scenario[scenario] = float(row.get("p95_ms_mean", math.nan))
+        if strategy != "oracle":
             continue
-        if strategy != baseline_strategy:
-            continue
-        baseline_by_scenario[scenario] = (
-            strategy,
+        oracle_by_scenario[scenario] = (
             float(row.get("p95_ms_mean", math.nan)),
             float(row.get("memory_time_cost_mean", math.nan)),
         )
@@ -561,31 +579,32 @@ def _attach_ctre95(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         strategy = str(row.get("strategy", ""))
         p95_m = float(row.get("p95_ms_mean", math.nan))
         cost_m = float(row.get("memory_time_cost_mean", math.nan))
-        p95_oracle = float(oracle_p95_by_scenario.get(scenario, math.nan))
-        baseline = baseline_by_scenario.get(scenario)
-        if baseline is None:
+        oracle = oracle_by_scenario.get(scenario)
+        if oracle is None:
             ctre95 = math.nan
         else:
-            baseline_strategy, p95_b, cost_b = baseline
+            p95_oracle, cost_oracle = oracle
             if (
                 math.isnan(p95_oracle)
-                or math.isnan(p95_b)
-                or math.isnan(cost_b)
+                or math.isnan(cost_oracle)
                 or math.isnan(p95_m)
                 or math.isnan(cost_m)
                 or cost_m <= 0.0
-                or cost_b <= 0.0
+                or cost_oracle <= 0.0
+                or p95_m <= 0.0
+                or p95_oracle <= 0.0
             ):
                 ctre95 = math.nan
-            elif strategy == baseline_strategy:
-                ctre95 = 1.0
+            elif strategy == "oracle":
+                ctre95 = 0.0
             else:
-                denom = (p95_b - p95_m)
-                if abs(denom) <= eps:
+                # EP95(m) = (P95_oracle / P95_m) * (Cost_oracle / Cost_m)
+                ep95 = (p95_oracle / (p95_m + eps)) * (cost_oracle / (cost_m + eps))
+                if ep95 <= 0.0 or math.isnan(ep95):
                     ctre95 = math.nan
                 else:
-                    # NCE95(m) = ((P95_b - P95_oracle + eps) / (P95_b - P95_m)) * (Cost_b / (Cost_m + eps))
-                    ctre95 = ((p95_b - p95_oracle + eps) / denom) * (cost_b / (cost_m + eps))
+                    # LogEP95(m) = -log(EP95(m))
+                    ctre95 = -math.log(ep95)
 
         payload = dict(row)
         payload["ctre95_mean"] = ctre95
@@ -649,6 +668,7 @@ def _write_metric_csv(metric_id: str, rows: list[dict[str, Any]], path: Path) ->
 
 def _plot_e2e_bundle(rows: list[dict[str, Any]], out_path: Path) -> None:
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
     _setup_plot_font(plt)
 
     row_map = {
@@ -664,39 +684,57 @@ def _plot_e2e_bundle(rows: list[dict[str, Any]], out_path: Path) -> None:
         raise RuntimeError("no rows available for e2e_bundle plot")
 
     metric_specs = [
-        ("avg_e2e_ms_mean", "Avg", "#2D6A4F"),
-        ("p95_ms_mean", "P95", "#E76F51"),
-        ("p99_ms_mean", "P99", "#264653"),
+        ("avg_e2e_ms_mean", "Avg"),
+        ("p95_ms_mean", "P95"),
+        ("p99_ms_mean", "P99"),
     ]
-    fig, axes = plt.subplots(3, 3, figsize=(19, 12.5), sharex=False, sharey="row")
+    fig, axes = plt.subplots(3, 3, figsize=(25, 14.5), sharex=False, sharey="row")
     x = list(range(len(strategies)))
-    labels = [DISPLAY_LABEL.get(str(item), str(item)) for item in strategies]
 
-    for metric_idx, (mean_key, metric_label, color) in enumerate(metric_specs):
+    for metric_idx, (mean_key, metric_label) in enumerate(metric_specs):
         for scenario_idx, scenario in enumerate(SCENARIO_ORDER):
             ax = axes[metric_idx][scenario_idx]
             vals: list[float] = []
             for strategy in strategies:
                 row = row_map.get((scenario, strategy))
                 vals.append(math.nan if row is None else float(row[mean_key]))
+            bar_colors = [_strategy_color(strategy) for strategy in strategies]
 
             ax.bar(
                 x,
                 vals,
                 width=0.72,
-                color=color,
-                edgecolor="none",
-                linewidth=0.0,
+                color=bar_colors,
+                edgecolor="#2F3E46",
+                linewidth=0.35,
             )
-            ax.set_title(f"{metric_label} · {scenario.upper()}")
+            ax.set_title(f"{metric_label} - {scenario.upper()}", fontsize=COMPARE_SUBTITLE_FS)
             ax.grid(axis="y", alpha=0.25)
             ax.set_xticks(x)
-            ax.set_xticklabels(labels, rotation=25, ha="right", fontsize=8)
+            ax.set_xticklabels([])
+            ax.tick_params(axis="x", which="both", length=0, labelbottom=False)
+            ax.tick_params(axis="y", labelsize=COMPARE_TICK_FS)
             if scenario_idx == 0:
-                ax.set_ylabel("Latency (ms)")
+                ax.set_ylabel("Latency (ms)", fontsize=COMPARE_AXIS_LABEL_FS)
 
-    fig.suptitle("E2E Latency by Metric and Load", y=0.995)
-    fig.tight_layout()
+    legend_handles = [
+        Patch(
+            facecolor=_strategy_color(strategy),
+            edgecolor="#2F3E46",
+            linewidth=0.35,
+            label=DISPLAY_LABEL.get(str(strategy), str(strategy)),
+        )
+        for strategy in strategies
+    ]
+    fig.legend(
+        handles=legend_handles,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.06),
+        ncol=max(1, len(legend_handles)),
+        frameon=False,
+        fontsize=COMPARE_LEGEND_FS + 1,
+    )
+    fig.tight_layout(rect=(0.0, 0.18, 1.0, 1.0))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -714,8 +752,12 @@ def _plot_scalar_metric(
     value_scale: float = 1.0,
     annotation_digits: int = 2,
     draw_zero_line: bool = False,
+    y_tick_decimals: int | None = None,
+    show_legend: bool = True,
 ) -> None:
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+    from matplotlib.ticker import FormatStrFormatter
     _setup_plot_font(plt)
 
     scenario_strategy_map: dict[tuple[str, str], dict[str, Any]] = {}
@@ -732,9 +774,8 @@ def _plot_scalar_metric(
     if not strategies:
         raise RuntimeError(f"no rows available for {mean_key} plot")
 
-    fig, axes = plt.subplots(1, 3, figsize=(18.5, 5.8), sharey=True)
+    fig, axes = plt.subplots(1, 3, figsize=(24, 7.5), sharey=True)
     x = list(range(len(strategies)))
-    labels = [DISPLAY_LABEL.get(str(item), str(item)) for item in strategies]
 
     for idx, scenario in enumerate(SCENARIO_ORDER):
         ax = axes[idx]
@@ -754,55 +795,49 @@ def _plot_scalar_metric(
         if not finite_vals:
             continue
 
-        bars = ax.bar(
+        ax.bar(
             x,
             vals,
             width=0.72,
-            color=SCENARIO_COLORS[scenario],
-            edgecolor="none",
-            linewidth=0.0,
+            color=[_strategy_color(strategy) for strategy in strategies],
+            edgecolor="#2F3E46",
+            linewidth=0.35,
         )
         if draw_zero_line:
             ax.axhline(0.0, color="#666666", linewidth=0.9, alpha=0.75, zorder=0)
 
-        max_abs = max(abs(v) for v in finite_vals)
-        span = max(finite_vals) - min(finite_vals)
-        if percent:
-            offset = max(0.8, 0.02 * max_abs, 0.03 * span)
-        else:
-            offset = max(0.02 * max_abs, 0.03 * span)
-            if offset <= 0.0:
-                offset = 1e-3
-
-        for bar in bars:
-            h = bar.get_height()
-            if math.isnan(float(h)):
-                continue
-            suffix = "%" if percent else ""
-            if h >= 0:
-                text_y = h + offset
-                va = "bottom"
-            else:
-                text_y = h - offset
-                va = "top"
-            ax.text(
-                bar.get_x() + bar.get_width() / 2.0,
-                text_y,
-                f"{h:.{annotation_digits}f}{suffix}",
-                ha="center",
-                va=va,
-                fontsize=8,
-            )
+        # Hide bar-value annotations for cleaner compare figures.
 
         ax.set_xticks(x)
-        ax.set_xticklabels(labels, rotation=20, ha="right", fontsize=8)
-        ax.set_title(f"{scenario.upper()} load")
+        ax.set_xticklabels([])
+        ax.tick_params(axis="x", which="both", length=0, labelbottom=False)
+        ax.tick_params(axis="y", labelsize=COMPARE_TICK_FS)
+        if y_tick_decimals is not None:
+            ax.yaxis.set_major_formatter(FormatStrFormatter(f"%.{int(y_tick_decimals)}f"))
+        ax.set_title(f"{scenario.upper()}", fontsize=COMPARE_SUBTITLE_FS)
         ax.grid(axis="y", alpha=0.25)
         if idx == 0:
-            ax.set_ylabel(y_label)
+            ax.set_ylabel(y_label, fontsize=COMPARE_AXIS_LABEL_FS)
 
-    fig.suptitle(title, y=0.995)
-    fig.tight_layout()
+    legend_handles = [
+        Patch(
+            facecolor=_strategy_color(strategy),
+            edgecolor="#2F3E46",
+            linewidth=0.35,
+            label=DISPLAY_LABEL.get(str(strategy), str(strategy)),
+        )
+        for strategy in strategies
+    ]
+    if show_legend:
+        fig.legend(
+            handles=legend_handles,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.01),
+            ncol=max(1, len(legend_handles)),
+            frameon=False,
+            fontsize=COMPARE_LEGEND_FS,
+        )
+    fig.tight_layout(rect=(0.0, 0.19, 1.0, 1.0))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -818,7 +853,7 @@ def _render_metric_plot(metric_id: str, rows: list[dict[str, Any]], out_path: Pa
             mean_key="cold_start_step_rate_mean",
             std_key="cold_start_step_rate_std",
             out_path=out_path,
-            title="Cold Start Step Rate by Load",
+            title="Cold Start Step Rate",
             y_label="Rate (%)",
             percent=True,
         )
@@ -829,7 +864,7 @@ def _render_metric_plot(metric_id: str, rows: list[dict[str, Any]], out_path: Pa
             mean_key="prewarm_utilization_mean",
             std_key="prewarm_utilization_std",
             out_path=out_path,
-            title="Prewarm Utilization by Load",
+            title="Scaling Utilization",
             y_label="Utilization (%)",
             percent=True,
         )
@@ -840,7 +875,7 @@ def _render_metric_plot(metric_id: str, rows: list[dict[str, Any]], out_path: Pa
             mean_key="prewarm_cost_mean",
             std_key="prewarm_cost_std",
             out_path=out_path,
-            title="Scale-out Container Count by Load",
+            title="Scale-out Container Count",
             y_label="Scale-out Container Count",
             percent=False,
         )
@@ -851,9 +886,12 @@ def _render_metric_plot(metric_id: str, rows: list[dict[str, Any]], out_path: Pa
             mean_key="memory_time_cost_mean",
             std_key="memory_time_cost_std",
             out_path=out_path,
-            title="Memory-Time Cost by Load",
-            y_label="Memory-Time Cost (MB*sec)",
+            title="Memory-Time Cost",
+            y_label="Memory-Time Cost (×1e8 MB*sec)",
             percent=False,
+            value_scale=1e-8,
+            annotation_digits=2,
+            y_tick_decimals=2,
         )
         return
     if metric_id == METRIC_CTRE95:
@@ -862,8 +900,8 @@ def _render_metric_plot(metric_id: str, rows: list[dict[str, Any]], out_path: Pa
             mean_key="ctre95_mean",
             std_key="ctre95_std",
             out_path=out_path,
-            title="NCE95 by Load",
-            y_label="NCE95",
+            title="LogEP95",
+            y_label="LogEP95",
             percent=False,
             value_scale=1.0,
             annotation_digits=2,
@@ -874,8 +912,11 @@ def _render_metric_plot(metric_id: str, rows: list[dict[str, Any]], out_path: Pa
 
 
 def _metric_rows_for_id(metric_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if metric_id in {METRIC_PREWARM_COST, METRIC_MEMORY_TIME_COST, METRIC_CTRE95}:
+    if metric_id in {METRIC_PREWARM_COST, METRIC_MEMORY_TIME_COST}:
         return list(rows)
+    if metric_id == METRIC_CTRE95:
+        # Hide Oracle for EP95/LogEP95 visualization.
+        return [row for row in rows if str(row.get("strategy", "")) != "oracle"]
     # Oracle is only meaningful for scale-out cost upper-bound comparison.
     return [row for row in rows if str(row.get("strategy", "")) != "oracle"]
 

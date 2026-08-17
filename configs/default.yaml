@@ -43,7 +43,7 @@ runtime:
   function_profile_mode: cpu_intensive_random
   function_profiles_file: data/raw/function_profiles/function_profiles.csv
   function_profile_seed_offset: 202
-  compute_mb_per_sec_per_1000mcpu: 180.0
+  compute_mb_per_sec_per_1000mcpu: 260.0
   function_cpu_request_mcpu_min: 700
   function_cpu_request_mcpu_max: 2600
   function_memory_mb_min: 256
@@ -159,8 +159,8 @@ autoscaler:
   hpwp_default_cold_ms: 800.0
   hpwp_default_trans_ms: 8.0
   hpwp_seed_offset: 2027
-  dbw_horizon_boost: 1.25
-  dbw_desired_scale: 1.35
+  dbw_horizon_boost: 2.0
+  dbw_desired_scale: 2.0
   dbw_desired_ewma_alpha: 0.35
   dbw_guard_buffer_min: 1
   dbw_down_margin: 1
