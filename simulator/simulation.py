@@ -33,7 +33,13 @@ class Event:
 
 
 class SimulationRunner:
-    def __init__(self, config: SimulationConfig, corpus: DagCorpus) -> None:
+    def __init__(
+        self,
+        config: SimulationConfig,
+        corpus: DagCorpus,
+        *,
+        transition_observers: list[Any] | None = None,
+    ) -> None:
         self._config = config
         self._corpus = corpus
         self._rng = random.Random(config.experiment.random_seed)
@@ -72,6 +78,7 @@ class SimulationRunner:
         self._event_seq = 0
         self._request_counter = 0
         self._requests: dict[str, RequestContext] = {}
+        self._transition_observers = list(transition_observers or [])
         self._frame_tick_ms = max(1, int(config.runtime.frame_tick_ms))
 
         self._cluster = PhysicalCluster(
@@ -448,14 +455,19 @@ class SimulationRunner:
             return
 
         if req.prev_function_node is not None and req.current_index > 0:
+            transition_payload = {
+                "request_id": req.request_id,
+                "um": req.um,
+                "src_node": req.prev_function_node,
+                "dst_node": function_node,
+                "timestamp_ms": event.timestamp_ms,
+                "transfer_ms": int(event.payload.get("transfer_ms", 0)),
+                "prefix": tuple(req.path[: req.current_index]),
+            }
+            for observer in self._transition_observers:
+                observer.on_transition(**transition_payload)
             self._autoscaler.on_transition(
-                request_id=req.request_id,
-                um=req.um,
-                src_node=req.prev_function_node,
-                dst_node=function_node,
-                timestamp_ms=event.timestamp_ms,
-                transfer_ms=int(event.payload.get("transfer_ms", 0)),
-                prefix=tuple(req.path[: req.current_index]),
+                **transition_payload,
             )
 
         self._cluster.set_container_running(container_id)

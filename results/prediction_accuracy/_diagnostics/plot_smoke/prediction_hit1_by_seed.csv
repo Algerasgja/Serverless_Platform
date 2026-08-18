@@ -1,0 +1,5 @@
+scenario,rate_multiplier,seed,method,method_label,transition_events,branching_events,events,hits,hit1,hit1_pct,run_dir
+low,0.00005000,42,conscale_no_context,ConScale w/o Context,871,184,184,104,0.56521739,56.52173913,D:\Serverless_platform\results\prediction_accuracy\plot_smoke\runs\20260817-175750_least_load_hpwp_v1
+low,0.00005000,42,xanadu,Xanadu,871,184,184,125,0.67934783,67.93478261,D:\Serverless_platform\results\prediction_accuracy\plot_smoke\runs\20260817-175750_least_load_hpwp_v1
+low,0.00005000,42,kraken,Kraken,871,184,184,116,0.63043478,63.04347826,D:\Serverless_platform\results\prediction_accuracy\plot_smoke\runs\20260817-175750_least_load_hpwp_v1
+low,0.00005000,42,conscale,ConScale,871,184,184,104,0.56521739,56.52173913,D:\Serverless_platform\results\prediction_accuracy\plot_smoke\runs\20260817-175750_least_load_hpwp_v1

@@ -1,0 +1,13 @@
+scenario,rate_multiplier,seed,method,method_label,transition_events,branching_events,events,hits,hit1,hit1_pct,run_dir
+low,0.00005000,42,conscale_no_context,ConScale w/o Context,871,184,184,104,0.56521739,56.52173913,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180350_least_load_hpwp_v1
+low,0.00005000,42,xanadu,Xanadu,871,184,184,125,0.67934783,67.93478261,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180350_least_load_hpwp_v1
+low,0.00005000,42,kraken,Kraken,871,184,184,116,0.63043478,63.04347826,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180350_least_load_hpwp_v1
+low,0.00005000,42,conscale,ConScale,871,184,184,104,0.56521739,56.52173913,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180350_least_load_hpwp_v1
+mid,0.00010000,42,conscale_no_context,ConScale w/o Context,1736,357,357,239,0.66946779,66.94677871,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180353_least_load_hpwp_v1
+mid,0.00010000,42,xanadu,Xanadu,1736,357,357,276,0.77310924,77.31092437,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180353_least_load_hpwp_v1
+mid,0.00010000,42,kraken,Kraken,1736,357,357,255,0.71428571,71.42857143,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180353_least_load_hpwp_v1
+mid,0.00010000,42,conscale,ConScale,1736,357,357,239,0.66946779,66.94677871,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180353_least_load_hpwp_v1
+high,0.00020000,42,conscale_no_context,ConScale w/o Context,3446,770,770,480,0.62337662,62.33766234,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180357_least_load_hpwp_v1
+high,0.00020000,42,xanadu,Xanadu,3446,770,770,577,0.74935065,74.93506494,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180357_least_load_hpwp_v1
+high,0.00020000,42,kraken,Kraken,3446,770,770,559,0.72597403,72.59740260,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180357_least_load_hpwp_v1
+high,0.00020000,42,conscale,ConScale,3446,770,770,480,0.62337662,62.33766234,D:\Serverless_platform\results\prediction_accuracy\one_seed_diagnostic\runs\20260817-180357_least_load_hpwp_v1

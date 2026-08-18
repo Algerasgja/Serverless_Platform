@@ -1,0 +1,17 @@
+scenario,rate_multiplier,seed,method,method_label,prefix_len_bucket,events,hits,hit1,hit1_pct
+high,0.00020000,42,conscale_no_context,ConScale w/o Context,1,471,316,0.67091295,67.09129512
+high,0.00020000,42,conscale_no_context,ConScale w/o Context,2,128,109,0.85156250,85.15625000
+high,0.00020000,42,conscale_no_context,ConScale w/o Context,3,87,84,0.96551724,96.55172414
+high,0.00020000,42,conscale_no_context,ConScale w/o Context,4+,57,48,0.84210526,84.21052632
+high,0.00020000,42,xanadu,Xanadu,1,471,316,0.67091295,67.09129512
+high,0.00020000,42,xanadu,Xanadu,2,128,109,0.85156250,85.15625000
+high,0.00020000,42,xanadu,Xanadu,3,87,84,0.96551724,96.55172414
+high,0.00020000,42,xanadu,Xanadu,4+,57,48,0.84210526,84.21052632
+high,0.00020000,42,kraken,Kraken,1,471,312,0.66242038,66.24203822
+high,0.00020000,42,kraken,Kraken,2,128,112,0.87500000,87.50000000
+high,0.00020000,42,kraken,Kraken,3,87,82,0.94252874,94.25287356
+high,0.00020000,42,kraken,Kraken,4+,57,48,0.84210526,84.21052632
+high,0.00020000,42,conscale,ConScale,1,471,316,0.67091295,67.09129512
+high,0.00020000,42,conscale,ConScale,2,128,120,0.93750000,93.75000000
+high,0.00020000,42,conscale,ConScale,3,87,84,0.96551724,96.55172414
+high,0.00020000,42,conscale,ConScale,4+,57,50,0.87719298,87.71929825

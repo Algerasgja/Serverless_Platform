@@ -1,0 +1,37 @@
+scenario,rate_multiplier,seed,method,method_label,transition_events,branching_events,events,hits,hit1,hit1_pct,run_dir
+low,0.00005000,42,conscale_no_context,ConScale w/o Context,871,184,184,125,0.67934783,67.93478261,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181735_least_load_hpwp_v1
+low,0.00005000,42,xanadu,Xanadu,871,184,184,125,0.67934783,67.93478261,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181735_least_load_hpwp_v1
+low,0.00005000,42,kraken,Kraken,871,184,184,116,0.63043478,63.04347826,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181735_least_load_hpwp_v1
+low,0.00005000,42,conscale,ConScale,871,184,184,125,0.67934783,67.93478261,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181735_least_load_hpwp_v1
+low,0.00005000,43,conscale_no_context,ConScale w/o Context,917,114,114,79,0.69298246,69.29824561,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181739_least_load_hpwp_v1
+low,0.00005000,43,xanadu,Xanadu,917,114,114,79,0.69298246,69.29824561,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181739_least_load_hpwp_v1
+low,0.00005000,43,kraken,Kraken,917,114,114,67,0.58771930,58.77192982,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181739_least_load_hpwp_v1
+low,0.00005000,43,conscale,ConScale,917,114,114,81,0.71052632,71.05263158,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181739_least_load_hpwp_v1
+low,0.00005000,44,conscale_no_context,ConScale w/o Context,910,111,111,55,0.49549550,49.54954955,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181742_least_load_hpwp_v1
+low,0.00005000,44,xanadu,Xanadu,910,111,111,55,0.49549550,49.54954955,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181742_least_load_hpwp_v1
+low,0.00005000,44,kraken,Kraken,910,111,111,55,0.49549550,49.54954955,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181742_least_load_hpwp_v1
+low,0.00005000,44,conscale,ConScale,910,111,111,58,0.52252252,52.25225225,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181742_least_load_hpwp_v1
+mid,0.00010000,42,conscale_no_context,ConScale w/o Context,1734,369,369,279,0.75609756,75.60975610,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181745_least_load_hpwp_v1
+mid,0.00010000,42,xanadu,Xanadu,1734,369,369,279,0.75609756,75.60975610,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181745_least_load_hpwp_v1
+mid,0.00010000,42,kraken,Kraken,1734,369,369,261,0.70731707,70.73170732,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181745_least_load_hpwp_v1
+mid,0.00010000,42,conscale,ConScale,1734,369,369,284,0.76964770,76.96476965,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181745_least_load_hpwp_v1
+mid,0.00010000,43,conscale_no_context,ConScale w/o Context,1742,230,230,151,0.65652174,65.65217391,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181749_least_load_hpwp_v1
+mid,0.00010000,43,xanadu,Xanadu,1742,230,230,151,0.65652174,65.65217391,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181749_least_load_hpwp_v1
+mid,0.00010000,43,kraken,Kraken,1742,230,230,146,0.63478261,63.47826087,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181749_least_load_hpwp_v1
+mid,0.00010000,43,conscale,ConScale,1742,230,230,157,0.68260870,68.26086957,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181749_least_load_hpwp_v1
+mid,0.00010000,44,conscale_no_context,ConScale w/o Context,1722,226,226,129,0.57079646,57.07964602,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181752_least_load_hpwp_v1
+mid,0.00010000,44,xanadu,Xanadu,1722,226,226,129,0.57079646,57.07964602,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181752_least_load_hpwp_v1
+mid,0.00010000,44,kraken,Kraken,1722,226,226,127,0.56194690,56.19469027,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181752_least_load_hpwp_v1
+mid,0.00010000,44,conscale,ConScale,1722,226,226,133,0.58849558,58.84955752,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181752_least_load_hpwp_v1
+high,0.00020000,42,conscale_no_context,ConScale w/o Context,3505,769,769,587,0.76332900,76.33289987,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181755_least_load_hpwp_v1
+high,0.00020000,42,xanadu,Xanadu,3505,769,769,587,0.76332900,76.33289987,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181755_least_load_hpwp_v1
+high,0.00020000,42,kraken,Kraken,3505,769,769,579,0.75292588,75.29258778,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181755_least_load_hpwp_v1
+high,0.00020000,42,conscale,ConScale,3505,769,769,591,0.76853056,76.85305592,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181755_least_load_hpwp_v1
+high,0.00020000,43,conscale_no_context,ConScale w/o Context,3508,513,513,382,0.74463938,74.46393762,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181759_least_load_hpwp_v1
+high,0.00020000,43,xanadu,Xanadu,3508,513,513,382,0.74463938,74.46393762,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181759_least_load_hpwp_v1
+high,0.00020000,43,kraken,Kraken,3508,513,513,374,0.72904483,72.90448343,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181759_least_load_hpwp_v1
+high,0.00020000,43,conscale,ConScale,3508,513,513,392,0.76413255,76.41325536,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181759_least_load_hpwp_v1
+high,0.00020000,44,conscale_no_context,ConScale w/o Context,3541,461,461,253,0.54880694,54.88069414,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181803_least_load_hpwp_v1
+high,0.00020000,44,xanadu,Xanadu,3541,461,461,253,0.54880694,54.88069414,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181803_least_load_hpwp_v1
+high,0.00020000,44,kraken,Kraken,3541,461,461,269,0.58351410,58.35140998,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181803_least_load_hpwp_v1
+high,0.00020000,44,conscale,ConScale,3541,461,461,283,0.61388286,61.38828633,D:\Serverless_platform\results\prediction_accuracy\latest\runs\20260817-181803_least_load_hpwp_v1
