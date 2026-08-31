@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import math
 import sys
 from dataclasses import dataclass
@@ -44,11 +45,14 @@ PARAM_KEYS = {
     PARAM_FORGET_GAMMA: "hpwp_forget_gamma",
 }
 
+TOTAL_RESULTS_DIRNAME = "total"
+LOAD_AVERAGE_RESULTS_DIRNAME = "load_average"
+
 DEFAULT_PARAM_VALUES = {
     PARAM_LMAX: [1, 2, 3, 4, 5],
-    PARAM_RHO_MASS: [0.3, 0.4, 0.5, 0.6, 0.7],
-    PARAM_TAU_P: [0.008, 0.012, 0.016, 0.02, 0.032],
-    PARAM_FORGET_GAMMA: [0.75, 0.82, 0.87, 0.9, 0.95],
+    PARAM_RHO_MASS: [0.6, 0.7, 0.8, 0.9, 1.0],
+    PARAM_TAU_P: [0.02, 0.05, 0.1, 0.2, 0.3],
+    PARAM_FORGET_GAMMA: [0.75, 0.85, 0.9, 0.95, 0.99],
 }
 
 SCENARIO_LABELS = {
@@ -63,6 +67,12 @@ LATENCY_METRICS = [
     ("p99_ms", "P99", "p99_ms_mean", "p99_ms_std", ":"),
 ]
 
+METRIC_COLORS = {
+    "avg_e2e_ms": "#4C78A8",
+    "p95_ms": "#F58518",
+    "p99_ms": "#E45756",
+}
+
 SCENARIO_COLORS = {
     "low": "#4C78A8",
     "mid": "#F58518",
@@ -76,6 +86,18 @@ OLD_HPARAM_ARTIFACTS = [
     "hparam_curated_labels.yaml",
     "hparam_tradeoff.png",
     "hparam_tradeoff_curated.png",
+]
+
+TOTAL_HPARAM_ARTIFACTS = [
+    "hparam_latency_by_seed.csv",
+    "hparam_latency_summary.csv",
+    "hparam_plot_series.csv",
+    "hparam_latency_trends.png",
+]
+
+LOAD_AVERAGE_HPARAM_ARTIFACTS = [
+    "hparam_latency_load_avg_plot_series.csv",
+    "hparam_latency_trends_load_avg.png",
 ]
 
 
@@ -140,6 +162,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--results-dir", default="results/hparam/latest", help="Output directory.")
     parser.add_argument("--python", default=sys.executable, help="Python executable.")
     parser.add_argument("--no-plot", action="store_true", help="Write CSV files only.")
+    parser.add_argument(
+        "--from-summary",
+        nargs="?",
+        const="",
+        default=None,
+        help=(
+            "Generate plot artifacts from an existing hparam_latency_summary.csv without running "
+            "simulations. Omit the value to use --results-dir/total/hparam_latency_summary.csv."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -249,6 +281,48 @@ def build_plot_series_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str,
     return rows
 
 
+def build_load_average_plot_series_rows(summary_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, float, str], list[tuple[float, dict[str, Any]]]] = {}
+    for row in summary_rows:
+        status = str(row.get("status", "ok")).lower()
+        if status.startswith("failed"):
+            continue
+        scenario = str(row.get("scenario", ""))
+        if scenario not in SCENARIO_ORDER:
+            continue
+        parameter = str(row["parameter"])
+        parameter_value = float(row["parameter_value"])
+        for metric_id, _, mean_key, _, _ in LATENCY_METRICS:
+            raw_value = row.get(mean_key)
+            if raw_value in (None, ""):
+                continue
+            grouped.setdefault((parameter, parameter_value, metric_id), []).append((float(raw_value), row))
+
+    rows: list[dict[str, Any]] = []
+    metric_labels = {metric_id: metric_label for metric_id, metric_label, *_ in LATENCY_METRICS}
+    for (parameter, parameter_value, metric_id), values_with_rows in grouped.items():
+        values = [value for value, _ in values_with_rows]
+        mean, std = _mean_std(values)
+        runs = sum(int(float(row.get("runs", 0) or 0)) for _, row in values_with_rows)
+        rows.append(
+            {
+                "parameter": parameter,
+                "parameter_label": PARAM_LABELS.get(parameter, parameter),
+                "parameter_value": parameter_value,
+                "scenario": "load_avg",
+                "scenario_label": "Load Average",
+                "latency_metric": metric_id,
+                "latency_metric_label": metric_labels.get(metric_id, metric_id),
+                "latency_ms_mean": mean,
+                "latency_ms_std": std,
+                "scenario_count": len(values),
+                "runs": runs,
+            }
+        )
+    rows.sort(key=_plot_series_sort_key)
+    return rows
+
+
 def plot_latency_trends(summary_rows: list[dict[str, Any]], out_path: Path) -> None:
     try:
         import matplotlib.pyplot as plt
@@ -334,8 +408,61 @@ def plot_latency_trends(summary_rows: list[dict[str, Any]], out_path: Path) -> N
     plt.close(fig)
 
 
+def plot_load_average_latency_trends(load_average_rows: list[dict[str, Any]], out_path: Path) -> None:
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("matplotlib is required for plotting; install with .[analysis]") from exc
+
+    p95_rows = [row for row in load_average_rows if str(row.get("latency_metric")) == "p95_ms"]
+    if not p95_rows:
+        raise RuntimeError("no load-average P95 rows available for plotting")
+
+    plt.rcParams["font.family"] = "serif"
+    plt.rcParams["font.serif"] = ["Times New Roman", "Times", "DejaVu Serif"]
+    plt.rcParams["axes.unicode_minus"] = False
+
+    fig, axes = plt.subplots(2, 2, figsize=(24, 16), sharey=False)
+    axes_flat = [axes[0][0], axes[0][1], axes[1][0], axes[1][1]]
+    panel_tags = ["(a)", "(b)", "(c)", "(d)"]
+
+    for ax, parameter, panel_tag in zip(axes_flat, PARAM_ORDER, panel_tags):
+        parameter_rows = [row for row in p95_rows if str(row["parameter"]) == parameter]
+        values = sorted({float(row["parameter_value"]) for row in parameter_rows})
+        row_by_value = {float(row["parameter_value"]): row for row in parameter_rows}
+        xs = [value for value in values if value in row_by_value]
+        ys = [float(row_by_value[value]["latency_ms_mean"]) for value in xs]
+        if xs:
+            ax.plot(
+                xs,
+                ys,
+                linestyle="-",
+                marker="o",
+                markersize=14.0,
+                linewidth=7.0,
+                color="#4C78A8",
+                alpha=0.95,
+            )
+
+        ax.set_title(f"{panel_tag} {PARAM_LABELS.get(parameter, parameter)}", fontsize=42, pad=24)
+        ax.set_xlabel(PARAM_LABELS.get(parameter, parameter), fontsize=36, labelpad=18)
+        ax.set_ylabel("P95 Latency (ms)", fontsize=36, labelpad=18)
+        ax.grid(axis="y", alpha=0.25, linewidth=2.0)
+        ax.tick_params(axis="both", labelsize=30, width=2.6, length=12)
+        for spine in ax.spines.values():
+            spine.set_linewidth(2.6)
+        if parameter == PARAM_LMAX:
+            ax.set_xticks(values)
+            ax.set_xticklabels([str(int(v)) for v in values], fontsize=30)
+
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 1.0), pad=3.0, w_pad=4.0, h_pad=4.0)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+
 def cleanup_old_outputs(results_dir: Path) -> None:
-    for name in OLD_HPARAM_ARTIFACTS:
+    for name in OLD_HPARAM_ARTIFACTS + TOTAL_HPARAM_ARTIFACTS + LOAD_AVERAGE_HPARAM_ARTIFACTS:
         path = results_dir / name
         if path.exists() and path.is_file():
             path.unlink()
@@ -462,9 +589,88 @@ def _by_seed_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _read_csv_rows(path: Path) -> list[dict[str, Any]]:
+    with path.open("r", encoding="utf-8-sig", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def _total_results_dir(results_dir: Path) -> Path:
+    return results_dir / TOTAL_RESULTS_DIRNAME
+
+
+def _load_average_results_dir(results_dir: Path) -> Path:
+    return results_dir / LOAD_AVERAGE_RESULTS_DIRNAME
+
+
+def _resolve_summary_path(token: str, *, root: Path, results_dir: Path) -> Path:
+    if not token:
+        candidates = [
+            _total_results_dir(results_dir) / "hparam_latency_summary.csv",
+            results_dir / "hparam_latency_summary.csv",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate.resolve()
+        path = candidates[0]
+    else:
+        raw_path = Path(token)
+        if raw_path.is_absolute():
+            path = raw_path
+        else:
+            results_candidate = results_dir / raw_path
+            root_candidate = root / raw_path
+            path = results_candidate if results_candidate.exists() else root_candidate
+    path = path.resolve()
+    if not path.exists():
+        raise FileNotFoundError(f"hparam summary csv not found: {path}")
+    return path
+
+
+def write_derived_plot_outputs(
+    *,
+    summary_rows: list[dict[str, Any]],
+    results_dir: Path,
+    no_plot: bool,
+) -> None:
+    plot_series_rows = build_plot_series_rows(summary_rows)
+    load_average_rows = build_load_average_plot_series_rows(summary_rows)
+    total_dir = _total_results_dir(results_dir)
+    load_average_dir = _load_average_results_dir(results_dir)
+
+    plot_series_path = total_dir / "hparam_plot_series.csv"
+    load_average_path = load_average_dir / "hparam_latency_load_avg_plot_series.csv"
+    write_csv(plot_series_path, plot_series_rows)
+    write_csv(load_average_path, load_average_rows)
+    print(f"saved plot series: {plot_series_path}")
+    print(f"saved load-average plot series: {load_average_path}")
+
+    if no_plot:
+        return
+
+    fig_path = total_dir / "hparam_latency_trends.png"
+    load_average_fig_path = load_average_dir / "hparam_latency_trends_load_avg.png"
+    plot_latency_trends(summary_rows, fig_path)
+    plot_load_average_latency_trends(load_average_rows, load_average_fig_path)
+    print(f"saved figure: {fig_path}")
+    print(f"saved load-average figure: {load_average_fig_path}")
+
+
 def main() -> int:
     args = parse_args()
     root = repo_root()
+    results_dir = ensure_results_dir(root=root, relative=args.results_dir)
+
+    if args.from_summary is not None:
+        summary_path = _resolve_summary_path(str(args.from_summary), root=root, results_dir=results_dir)
+        summary_rows = _read_csv_rows(summary_path)
+        print(f"loaded summary metrics: {summary_path}")
+        write_derived_plot_outputs(
+            summary_rows=summary_rows,
+            results_dir=results_dir,
+            no_plot=bool(args.no_plot),
+        )
+        return 0
+
     cfg_path = resolve_config_path(args.config, root=root)
     base_config = load_base_config(cfg_path)
     exp_name = str((base_config.get("experiment") or {}).get("name", cfg_path.stem))
@@ -490,7 +696,6 @@ def main() -> int:
         seeds=[int(seed) for seed in args.seeds],
     )
 
-    results_dir = ensure_results_dir(root=root, relative=args.results_dir)
     cleanup_old_outputs(results_dir)
 
     metrics, failures = run_with_temp_configs(
@@ -501,22 +706,19 @@ def main() -> int:
     by_seed_rows = _build_by_seed_rows(metrics=metrics, variants=variants)
     by_seed_rows.extend(_failure_rows(failures=failures, variants=variants))
     summary_rows = aggregate_hparam_rows(by_seed_rows=by_seed_rows)
-    plot_series_rows = build_plot_series_rows(summary_rows)
 
-    by_seed_path = results_dir / "hparam_latency_by_seed.csv"
-    summary_path = results_dir / "hparam_latency_summary.csv"
-    plot_series_path = results_dir / "hparam_plot_series.csv"
+    total_dir = _total_results_dir(results_dir)
+    by_seed_path = total_dir / "hparam_latency_by_seed.csv"
+    summary_path = total_dir / "hparam_latency_summary.csv"
     write_csv(by_seed_path, by_seed_rows)
     write_csv(summary_path, summary_rows)
-    write_csv(plot_series_path, plot_series_rows)
     print(f"saved by-seed metrics: {by_seed_path}")
     print(f"saved summary metrics: {summary_path}")
-    print(f"saved plot series: {plot_series_path}")
-
-    if not args.no_plot:
-        fig_path = results_dir / "hparam_latency_trends.png"
-        plot_latency_trends(summary_rows, fig_path)
-        print(f"saved figure: {fig_path}")
+    write_derived_plot_outputs(
+        summary_rows=summary_rows,
+        results_dir=results_dir,
+        no_plot=bool(args.no_plot),
+    )
 
     if failures:
         print(f"failures: {len(failures)}")

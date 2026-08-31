@@ -145,6 +145,8 @@ autoscaler:
   hpwp_sched_min_sec: 1
   hpwp_sched_max_sec: 15
   hpwp_horizon_alpha: 2.2
+  hpwp_rho_mass: 0.95
+  hpwp_tau_p: 0.1
   hpwp_urgency_epsilon_ms: 500.0
   hpwp_phase_window_k: 30
   hpwp_phase_n_min: 12
